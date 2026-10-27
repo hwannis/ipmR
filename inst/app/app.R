@@ -1,0 +1,8 @@
+# ipmR Shiny app - package version (launched by ipmR::run_ipm_app())
+library(ipmR)
+library(shiny)
+library(bslib)
+library(DT)
+library(data.table)
+source("app_core.R", local = TRUE)
+shinyApp(ipm_ui, ipm_server)

@@ -1,0 +1,13 @@
+# Caddy in front of ShinyProxy (Option B). Replace ipm.example.org by your domain.
+ipm.example.org {
+	request_body {
+		max_size 500MB
+	}
+	reverse_proxy shinyproxy:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

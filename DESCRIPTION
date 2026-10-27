@@ -1,0 +1,39 @@
+Package: ipmR
+Type: Package
+Title: Interviewer Performance Monitoring for MICS (R port of IPM v7)
+Version: 0.4.4
+Authors@R: c(person("Hrair", "Wannis", role = c("aut", "cre"), email = "cobmahavishnu@gmail.com"),
+    person("Pierre", "Martel", role = "ctb", comment = "Author of the original Stata IPM application v7.0.0"))
+Description: R implementation of the Interviewer Performance Monitoring (IPM)
+    application for MICS fieldwork data quality monitoring: questionnaires per
+    team and day, completion rates, interview durations, household composition,
+    birth histories, anthropometry heaping and out-of-range, and within-team
+    flag analysis of interviewer bias. Adds a team scorecard, rule-based
+    and AI-generated team action plans (aggregated statistics only are sent
+    to the model) and a Shiny front-end.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.1)
+Imports:
+    data.table,
+    haven,
+    ggplot2,
+    officer,
+    flextable,
+    openxlsx,
+    yaml,
+    jsonlite,
+    tidyselect,
+    scales,
+    stats,
+    utils
+Suggests:
+    httr2,
+    commonmark,
+    shiny,
+    bslib,
+    DT,
+    ragg,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.1

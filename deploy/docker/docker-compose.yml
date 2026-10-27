@@ -1,0 +1,32 @@
+# OPTION A - one shared IPM container behind Caddy (HTTPS + password)
+#   1. edit Caddyfile (domain name + password hash)
+#   2. from this folder:  docker compose up -d --build
+services:
+  ipm:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: ipm-app:latest
+    restart: unless-stopped
+    expose: ["3838"]
+    tmpfs:
+      - /tmp:size=2g,mode=1777      # uploads, results and reports live in RAM only - nothing is written to disk
+    mem_limit: 3g
+    environment:
+      IPM_IDLE_MINUTES: "30"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [ipm]
+
+volumes:
+  caddy_data:
+  caddy_config:

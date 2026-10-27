@@ -1,0 +1,33 @@
+# IPM app for OpenMediaVault (Services > Compose > Files > Add, paste this, Save, then "Up")
+# Prerequisite: build the image once on the OMV host with  sudo bash update.sh  (see deploy/README.md).
+services:
+  ipm:
+    image: ipm-app:latest
+    container_name: ipm
+    runtime: runc                   # independent of the nvidia default runtime (OMV can rewrite daemon.json)
+    labels:
+      - com.centurylinklabs.watchtower.enable=false   # local image: Watchtower must not try to pull it
+    restart: unless-stopped
+    ports:
+      - "3838:3838"                 # open http://<omv-ip>:3838 on your LAN / VPN
+    tmpfs:
+      - /tmp:size=2g,mode=1777      # all uploaded data, results and reports stay in RAM only
+    mem_limit: 3g
+    environment:
+      IPM_IDLE_MINUTES: "30"        # session data deleted after 30 min without activity
+      # --- AI (optional). Define one or more connections; users pick the connection and the model in the app ---
+      # Claude API (only aggregated statistics are sent):
+      # ANTHROPIC_API_KEY: "sk-ant-..."
+      # Local models with Ollama (nothing leaves your network); the app lists the installed models:
+      # IPM_AI_OLLAMA_URL: "http://192.168.1.10:11434"
+      # Any OpenAI-compatible server (vLLM, LM Studio, llama.cpp, OpenAI):
+      # IPM_AI_OPENAI_URL: "http://192.168.1.10:8000/v1"
+      # IPM_AI_OPENAI_KEY: ""
+      # Default connection and model shown first:
+      # IPM_AI_PROVIDER: "anthropic"          # anthropic | ollama | openai
+      # IPM_AI_MODEL: "claude-sonnet-5-5"
+      # IPM_AI_ALLOW_CUSTOM: "true"           # users may add their own connection/key for their session
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

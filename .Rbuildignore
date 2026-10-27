@@ -1,0 +1,7 @@
+^\.Rproj\.user$
+^.*\.Rproj$
+^\.github$
+^\.dockerignore$
+^\.gitignore$
+^deploy$
+^ipm_shinyapp$

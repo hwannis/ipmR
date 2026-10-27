@@ -1,0 +1,33 @@
+# On a version tag (v0.4.4, v0.5.0 ...): build the package tarball and the shinyapps.io bundle,
+# and publish them as a GitHub release.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Check that the tag matches DESCRIPTION
+        run: |
+          v=$(grep '^Version:' DESCRIPTION | awk '{print $2}')
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} does not match DESCRIPTION version $v"; exit 1; }
+      - name: Build package tarball
+        run: R CMD build --no-build-vignettes --no-manual .
+      - name: Build shinyapps.io bundle
+        run: |
+          Rscript deploy/shinyapps/make_bundle.R ipm_shinyapp
+          zip -qr ipm_shinyapp.zip ipm_shinyapp
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="# ipmR ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^# ipmR /{f=0} f' NEWS.md)
+          gh release create "${GITHUB_REF_NAME}" ipmR_*.tar.gz ipm_shinyapp.zip \
+            --title "ipmR ${GITHUB_REF_NAME}" --notes "${notes:-See NEWS.md}"

@@ -1,0 +1,7 @@
+.git
+.github
+*.tar.gz
+*.zip
+**/.Rhistory
+**/*.sav
+**/*.dta

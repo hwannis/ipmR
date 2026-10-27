@@ -1,0 +1,57 @@
+# OPTION B - ShinyProxy: every user gets a private IPM container, destroyed at logout or after inactivity.
+proxy:
+  title: IPM - Interviewer Performance Monitoring for MICS
+  landing-page: /app/ipm            # open the app directly after login
+  port: 8080
+  heartbeat-rate: 10000
+  heartbeat-timeout: 1800000        # 30 min without a browser heartbeat -> container (and all its data) removed
+  container-wait-time: 60000
+  hide-navbar: false
+
+  # --- Login: local users (change the passwords!) ---
+  authentication: simple
+  admin-groups: admins
+  users:
+    - name: hrair
+      password: CHANGE_ME_1
+      groups: admins
+    - name: mics_colleague
+      password: CHANGE_ME_2
+      groups: users
+
+  # --- Alternative: UNICEF / Microsoft Entra ID single sign-on (needs an app registration by IT) ---
+  # authentication: openid
+  # openid:
+  #   auth-url: https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/authorize
+  #   token-url: https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token
+  #   jwks-url: https://login.microsoftonline.com/<TENANT_ID>/discovery/v2.0/keys
+  #   client-id: <CLIENT_ID>
+  #   client-secret: <CLIENT_SECRET>
+  #   username-attribute: preferred_username
+
+  container-backend: docker
+  docker:
+    internal-networking: true
+
+  specs:
+    - id: ipm
+      display-name: IPM - Interviewer Performance Monitoring
+      description: Upload MICS fieldwork data (.sav) and get interviewer performance monitoring outputs.
+      container-image: ipm-app:latest
+      container-network: ipm-net
+      container-memory-limit: 3g
+      container-env:
+        IPM_IDLE_MINUTES: "30"
+      port: 3838
+      access-groups: [admins, users]
+
+logging:
+  file:
+    name: /tmp/shinyproxy.log
+
+server:
+  forward-headers-strategy: native
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB

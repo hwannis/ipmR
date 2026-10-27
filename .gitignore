@@ -1,0 +1,17 @@
+# never commit survey data or results
+*.sav
+*.dta
+*.rds
+*.RData
+ipm_results*/
+results*/
+data/
+# build products
+*.tar.gz
+*.zip
+ipm_shinyapp/
+ipmR.Rcheck/
+# R / editors
+.Rproj.user/
+.Rhistory
+.DS_Store

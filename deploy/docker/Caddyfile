@@ -1,0 +1,27 @@
+# Caddy reverse proxy for the IPM app (Option A)
+# - Replace ipm.example.org by your domain name (DNS A record -> your public IP; pfSense: forward TCP 80 and 443 to this host).
+#   Caddy obtains and renews the HTTPS certificate automatically.
+# - LAN only, no domain: replace the first line by   :443   and add   tls internal   inside the block.
+# - Password: generate the hash with
+#       docker run --rm caddy:2 caddy hash-password --plaintext 'YourStrongPassword'
+#   and paste it after the user name (one line per user).
+
+ipm.example.org {
+	basic_auth {
+		mics $2a$14$REPLACE_WITH_THE_HASH_PRINTED_BY_caddy_hash-password
+	}
+	request_body {
+		max_size 500MB
+	}
+	reverse_proxy ipm:3838
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	log {
+		output stderr
+		format console
+	}
+}

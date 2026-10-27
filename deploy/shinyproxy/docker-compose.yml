@@ -1,0 +1,32 @@
+# OPTION B - ShinyProxy (one private container per user) behind Caddy
+#   1. build the app image first, from the repository root:  docker build -f deploy/docker/Dockerfile -t ipm-app:latest .
+#   2. edit application.yml (users/passwords) and Caddyfile (domain; remove basic_auth: ShinyProxy has its own login)
+#   3. docker compose up -d
+services:
+  shinyproxy:
+    image: openanalytics/shinyproxy:3.1.1
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock      # ShinyProxy starts/stops the per-user IPM containers
+      - ./application.yml:/opt/shinyproxy/application.yml:ro
+    group_add: ["${DOCKER_GID:-999}"]                  # gid of the docker group on the host: getent group docker
+    networks: [ipm-net]
+    expose: ["8080"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [ipm-net]
+
+networks:
+  ipm-net:
+    name: ipm-net
+
+volumes:
+  caddy_data:
+  caddy_config:

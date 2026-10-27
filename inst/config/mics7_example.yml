@@ -1,0 +1,320 @@
+survey_name: Example MICS7 survey - fieldwork monitoring
+data_dir: data
+results_dir: data/ipm_results
+period:
+  start: '2026-09-20'
+  days: 21.0
+teams:
+  ranges:
+  - 102-106
+  - 202-206
+  - 209-212
+  - 302-306
+  - 309-313
+  - 402-406
+  - 502-506
+  - 609-613
+  - 702-706
+  - 709-712
+  - 802-806
+  - 809-812
+  - 909-912
+  supervisor:
+  - '101'
+  - '201'
+  - '208'
+  - '301'
+  - '308'
+  - '401'
+  - '501'
+  - '608'
+  - '701'
+  - '708'
+  - '801'
+  - '808'
+  - '908'
+outputs:
+  quesperday: yes
+  quescrates: yes
+  quesmtimes: yes
+  meannohhm: yes
+  everborn: yes
+  u5deaths: yes
+  ant_heap: yes
+  ant_oor: yes
+  flaganal: yes
+hhm_groups:
+- total
+- a00_01
+- a00_04
+- a05_17
+- f15_17
+- f46_49
+- f15_49
+- m15_49
+extras:
+  hhm:
+    dataset: hl
+    sex: HL4
+    age: HL6
+  bh:
+    dataset: bh
+    death: BH5
+    age_death: BH9C
+  ant:
+    dataset: ch
+    height: AN11
+    flags:
+    - HAZFLAG
+    - WAZFLAG
+    - WHZFLAG
+datasets:
+  bh:
+    file: bh.sav
+    parent: wm
+    keys:
+    - HH1
+    - HH2
+    - LN
+    flag_modules: BH*
+    flag_ignore:
+    - BHA
+    - BHB
+    - BH0
+    - BH1
+    - BH8
+    flag_units: BH9U
+  ch:
+    file: ch.sav
+    interviewer: UF5
+    result: UF17
+    day: UF7D
+    start_hour: UF8H
+    end_hour: UF11H
+    flag_modules:
+    - UB*
+    - UIN*
+    - BR*
+    - EC*
+    - UCD*
+    - UCF*
+    - BD*
+    - IM*
+    - DA*
+    - AR*
+    - MC*
+    flag_ignore:
+    - EC5F1A
+    - EC5F1B
+    - EC5F1X
+    - EC5F1NR
+    flag_units: []
+    keys: []
+  fs:
+    file: fs.sav
+    interviewer: FS5
+    result: FS17
+    day: FS7D
+    start_hour: FS8H
+    end_hour: FS11H
+    flag_modules:
+    - CB*
+    - CL*
+    - FCD*
+    - FCF*
+    - PR*
+    - FL*
+    flag_ignore: []
+    flag_units: []
+    keys: []
+  hh:
+    file: hh.sav
+    interviewer: HH3
+    result: HH46
+    day: HH5D
+    start_hour: HH11H
+    end_hour: HH13H
+    flag_modules:
+    - HC*
+    - EU*
+    - FE*
+    - WS*
+    - HW*
+    - WQ*
+    flag_ignore: []
+    flag_units: []
+    keys: []
+  hl:
+    file: hl.sav
+    day: HH5D
+    parent: hh
+    keys:
+    - HH1
+    - HH2
+    flag_modules:
+    - HL*
+    - ED*
+    flag_ignore:
+    - HL1
+    - HL2
+    - HL8
+    - HL9
+    - HL10
+    - HL14
+    - HL18
+    - HL20
+    - ED1
+    - ED2
+    flag_units: []
+  mm:
+    file: mm.sav
+    parent: wm
+    keys:
+    - HH1
+    - HH2
+    - LN
+    flag_modules: MM*
+    flag_ignore: MMLN
+    flag_units: []
+  mn:
+    file: mn.sav
+    interviewer: MWM5
+    result: MWM17
+    day: MWM6D
+    start_hour: MWM7H
+    end_hour: MWM10H
+    flag_modules:
+    - MWB*
+    - MDV*
+    - MVT*
+    - MMA*
+    - MAF*
+    flag_ignore: []
+    flag_units: []
+    keys: []
+  myfg:
+    file: myfg.sav
+    parent: wm
+    keys:
+    - HH1
+    - HH2
+    - LN
+    flag_modules: FG*
+    flag_ignore:
+    - FGLN
+    - FG14
+    flag_units: []
+  tn:
+    file: tn.sav
+    parent: hh
+    keys:
+    - HH1
+    - HH2
+    flag_modules: TN*
+    flag_ignore: TNLN
+    flag_units: []
+  wm:
+    file: wm.sav
+    interviewer: WM5
+    result: WM17
+    day: WM6D
+    start_hour: WM7H
+    end_hour: WM10H
+    flag_modules:
+    - WB*
+    - IN*
+    - IC*
+    - CM*
+    - MN*
+    - PN*
+    - CP*
+    - UN*
+    - FG*
+    - DV*
+    - VT*
+    - MA*
+    - AF*
+    - MX*
+    - MD*
+    flag_ignore:
+    - CM18
+    - MX1$01
+    - MX1$02
+    - MX1$03
+    - MX1$04
+    - MX1$05
+    - MX1$06
+    - MX1$07
+    - MX1$08
+    - MX1$09
+    - MX1$10
+    - MX1$11
+    - MX1$12
+    - MX1$13
+    - MX1$14
+    - MX1$15
+    - MX1$16
+    - MX1$17
+    - MX1$18
+    - MX1$19
+    - MX1$20
+    - MX2$01
+    - MX2$02
+    - MX2$03
+    - MX2$04
+    - MX2$05
+    - MX2$06
+    - MX2$07
+    - MX2$08
+    - MX2$09
+    - MX2$10
+    - MX2$11
+    - MX2$12
+    - MX2$13
+    - MX2$14
+    - MX2$15
+    - MX2$16
+    - MX2$17
+    - MX2$18
+    - MX2$19
+    - MX2$20
+    flag_units:
+    - MN4AU
+    - MN26U
+    - MN37U
+    - PN3U
+    - PN13U
+    - PN22U
+    - UN14U
+    keys: []
+options:
+  scatmaxrow: 7.0
+  scatmaxcol: 12.0
+  maxquestime: 60.0
+  hhunit:
+  - HH1
+  - HH2
+  momunit:
+  - HH1
+  - HH2
+  - LN
+  antunit:
+  - HH1
+  - HH2
+  - LN
+  max_uniq: 34.0
+  test_min: 5.0
+  levelsig: 0.001
+  max_flag_var: 50.0
+  highly_flag: 10.0
+  interco: 1.0
+  hhmsexm: 1.0
+  hhmsexf: 2.0
+  bhdeath: 2.0
+  outrange: 1.0
+  woi_min_daily: 20.0
+  woi_anchor: dataset
+  test_min_nonmissing: no
+  exclude_height_codes: yes
+  filter_parent_result: yes
+  fig_dpi: 150.0
