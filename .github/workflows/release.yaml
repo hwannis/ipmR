@@ -1,41 +1,61 @@
-# Build the package tarball and the shinyapps.io bundle and attach them to the GitHub release.
-# Runs when a version tag (v0.4.4, v0.5.0 ...) is pushed, or when a release is published on github.com
-# (Releases > Draft a new release > choose or create the tag > Publish).
+# Publishes a GitHub release with the package tarball and the shinyapps.io bundle.
+#  - Automatically: after R-CMD-check passes on main, if the Version in DESCRIPTION has no release yet,
+#    the tag vX.Y.Z and its release are created. Bumping Version (and NEWS.md) on main = a new release.
+#  - Manually: publishing a release on github.com (tag vX.Y.Z matching DESCRIPTION) attaches the files to it.
 name: release
 on:
-  push:
-    tags: ['v*']
+  workflow_run:
+    workflows: [R-CMD-check]
+    types: [completed]
+    branches: [main]
   release:
     types: [published]
+  workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - uses: r-lib/actions/setup-r@v2
         with:
-          use-public-rspm: true
-      - name: Check that the tag matches DESCRIPTION
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Version and tag
+        id: v
         run: |
           v=$(grep '^Version:' DESCRIPTION | awk '{print $2}')
-          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} does not match DESCRIPTION version $v"; exit 1; }
-      - name: Build package tarball
-        run: R CMD build --no-build-vignettes --no-manual .
-      - name: Build shinyapps.io bundle
+          tag="v$v"
+          if [ "${{ github.event_name }}" = "release" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match DESCRIPTION version $v"; exit 1; fi
+          skip=false
+          if [ "${{ github.event_name }}" = "workflow_run" ] && gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then skip=true; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"; echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "Version $v, tag $tag, skip=$skip"
+      - uses: r-lib/actions/setup-r@v2
+        if: steps.v.outputs.skip == 'false'
+        with:
+          use-public-rspm: true
+      - name: Build package tarball and shinyapps.io bundle
+        if: steps.v.outputs.skip == 'false'
         run: |
+          R CMD build --no-build-vignettes --no-manual .
           Rscript deploy/shinyapps/make_bundle.R ipm_shinyapp
           zip -qr ipm_shinyapp.zip ipm_shinyapp
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: steps.v.outputs.skip == 'false'
         run: |
-          notes=$(awk -v v="# ipmR ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^# ipmR /{f=0} f' NEWS.md)
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" ipmR_*.tar.gz ipm_shinyapp.zip --clobber
-            gh release edit "${GITHUB_REF_NAME}" --notes "${notes:-See NEWS.md}"
+          tag="${{ steps.v.outputs.tag }}"
+          notes=$(awk -v v="# ipmR ${tag#v}" '$0==v{f=1;next} /^# ipmR /{f=0} f' NEWS.md)
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" ipmR_*.tar.gz ipm_shinyapp.zip --clobber -R "$GITHUB_REPOSITORY"
+            gh release edit "$tag" --notes "${notes:-See NEWS.md}" -R "$GITHUB_REPOSITORY"
           else
-            gh release create "${GITHUB_REF_NAME}" ipmR_*.tar.gz ipm_shinyapp.zip \
-              --title "ipmR ${GITHUB_REF_NAME}" --notes "${notes:-See NEWS.md}"
+            gh release create "$tag" ipmR_*.tar.gz ipm_shinyapp.zip --target "$(git rev-parse HEAD)" \
+              --title "ipmR $tag" --notes "${notes:-See NEWS.md}" -R "$GITHUB_REPOSITORY"
           fi
