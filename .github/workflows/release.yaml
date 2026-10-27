@@ -1,9 +1,12 @@
-# On a version tag (v0.4.4, v0.5.0 ...): build the package tarball and the shinyapps.io bundle,
-# and publish them as a GitHub release.
+# Build the package tarball and the shinyapps.io bundle and attach them to the GitHub release.
+# Runs when a version tag (v0.4.4, v0.5.0 ...) is pushed, or when a release is published on github.com
+# (Releases > Draft a new release > choose or create the tag > Publish).
 name: release
 on:
   push:
     tags: ['v*']
+  release:
+    types: [published]
 permissions:
   contents: write
 jobs:
@@ -29,5 +32,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           notes=$(awk -v v="# ipmR ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^# ipmR /{f=0} f' NEWS.md)
-          gh release create "${GITHUB_REF_NAME}" ipmR_*.tar.gz ipm_shinyapp.zip \
-            --title "ipmR ${GITHUB_REF_NAME}" --notes "${notes:-See NEWS.md}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" ipmR_*.tar.gz ipm_shinyapp.zip --clobber
+            gh release edit "${GITHUB_REF_NAME}" --notes "${notes:-See NEWS.md}"
+          else
+            gh release create "${GITHUB_REF_NAME}" ipmR_*.tar.gz ipm_shinyapp.zip \
+              --title "ipmR ${GITHUB_REF_NAME}" --notes "${notes:-See NEWS.md}"
+          fi
