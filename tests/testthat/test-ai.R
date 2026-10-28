@@ -121,3 +121,26 @@ test_that("Ollama native API: context sized to the evidence, JSON schema passed 
   expect_identical(pl$model, "big:14b")
   expect_true(httr2::with_mocked_responses(mock, ipm_ai_test(st))$ok)
 })
+
+test_that("the preview is byte-for-byte the request that is sent", {
+  skip_if_not_installed("httr2")
+  res <- synth_res(); sc <- ipm_scorecard(res)
+  canned <- as.character(jsonlite::toJSON(ipm_plan_rules(sc), auto_unbox = TRUE, null = "null"))
+  seen <- new.env()
+  mock <- function(req) {
+    seen$body <- if (is.raw(req$body$data)) rawToChar(req$body$data) else req$body$data
+    b <- jsonlite::fromJSON(seen$body, simplifyVector = FALSE)
+    httr2::response_json(200, body = list(content = list(list(type = "text", text = if (!is.null(b$output_config)) canned else "A")),
+                                          stop_reason = "end_turn", model = b$model, usage = list(input_tokens = 1, output_tokens = 1)))
+  }
+  st <- ipm_ai_settings("anthropic", api_key = "secret-key", base_url = "https://api.example.org")
+  pv <- ipm_ai_preview(res, sc, st, "plan", language = "French")
+  httr2::with_mocked_responses(mock, ipm_ai_plan(res, sc, st, language = "French"))
+  expect_identical(as.character(jsonlite::minify(pv$json)), as.character(jsonlite::minify(seen$body)))
+  expect_false(grepl("secret-key", pv$json)); expect_false(grepl("secret-key", paste(pv$headers, collapse = "")))
+  pq <- ipm_ai_preview(res, sc, st, "question", question = "What about team 1?")
+  httr2::with_mocked_responses(mock, ipm_ai_ask("What about team 1?", res, sc, st))
+  expect_identical(as.character(jsonlite::minify(pq$json)), as.character(jsonlite::minify(seen$body)))
+  expect_match(pq$json, "Question: What about team 1")
+  expect_true(all(c("instructions", "evidence_and_request", "answer_format") %in% names(pv$parts)))
+})

@@ -229,6 +229,53 @@ ai_system_prompt <- function(language = "English") paste(
   "6. Be concise and practical: the plan is used to brief supervisors this week.",
   sprintf("7. Write all text in %s.", language), sep = "\n")
 
+# ---------------------------------------------------------------- prompts (one place, used for the calls and the preview)
+
+ai_plan_prompt <- function(res, sc, language = "English", max_teams = 30) {
+  evj <- ai_json(ipm_ai_evidence(res, sc, max_teams = max_teams))
+  user <- paste0("Evidence (JSON):\n", evj, "\n\nWrite the action plan. Include every team whose rule-based priority is High or Medium, and any other team you consider needs action; ",
+                 "list survey-wide question/module problems separately. Use at most 6 issues and 5 actions per team.")
+  list(system = ai_system_prompt(language), user = user, schema = ipm_plan_schema(), max_tokens = 16000, evidence_json = evj)
+}
+
+ai_ask_prompt <- function(question, res, sc, history = list(), language = "English") {
+  labs <- sc$teams$team_label
+  hit <- labs[vapply(labs, function(l) grepl(paste0("(^|[^A-Za-z0-9])", l, "([^0-9]|$)"), question, ignore.case = TRUE) ||
+                                      grepl(paste0("team\\s*", sub("^\\D*", "", l), "([^0-9]|$)"), question, ignore.case = TRUE), logical(1))]
+  ev <- ipm_ai_evidence(res, sc, team = if (length(hit)) hit[1] else NULL)
+  hist <- paste(vapply(utils::tail(history, 4), function(h) sprintf("Q: %s\nA: %s", h$q, h$a), ""), collapse = "\n\n")
+  user <- paste0("Evidence (JSON):\n", ai_json(ev), if (nzchar(hist)) paste0("\n\nEarlier questions in this session:\n", hist) else "",
+                 "\n\nQuestion: ", question,
+                 "\n\nAnswer in a few short paragraphs or bullet points (markdown). Quote the numbers from the evidence. If the evidence does not contain the answer, say so and say which IPM output or flag table to look at.")
+  list(system = ai_system_prompt(language), user = user, schema = NULL, max_tokens = 3000, team = hit)
+}
+
+#' Exactly what will be sent to the AI model
+#'
+#' Builds, with the same code as the real calls, the full request for an action plan or for a question:
+#' the endpoint, the headers (API key hidden) and the JSON body with the instructions (system prompt),
+#' the evidence, the request and, for the plan, the required answer format.
+#' @param res,sc,st as in ipm_ai_plan()
+#' @param what "plan" or "question"
+#' @param question the question (for what = "question")
+#' @param history earlier questions in the session
+#' @param language language of the answer
+#' @return list(url, headers, body, json, chars, tokens_estimate, parts)
+#' @export
+ipm_ai_preview <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), what = c("plan", "question"),
+                           question = "Which team should the coordinator visit first, and why?", history = list(), language = "English") {
+  what <- match.arg(what)
+  pr <- if (what == "plan") ai_plan_prompt(res, sc, language) else ai_ask_prompt(question, res, sc, history, language)
+  if (!st$provider %in% c("anthropic", "ollama", "openai")) st <- ipm_ai_settings("anthropic", api_key = "x")   # show the Claude format when nothing is set up
+  rq <- ai_request(st, pr$system, pr$user, pr$schema, pr$max_tokens)
+  j <- ai_json(rq$body)
+  list(url = rq$url, headers = rq$headers, body = rq$body, provider = st$provider, model = st$model,
+       json = jsonlite::prettify(j, indent = 1), chars = nchar(j), tokens_estimate = round(nchar(j) / 3.5),
+       parts = c(instructions = nchar(pr$system), evidence_and_request = nchar(pr$user),
+                 answer_format = if (is.null(pr$schema)) 0L else nchar(ai_json(pr$schema))),
+       max_output_tokens = pr$max_tokens)
+}
+
 # ---------------------------------------------------------------- provider calls
 
 ai_extract_json <- function(txt) {
@@ -236,6 +283,29 @@ ai_extract_json <- function(txt) {
   a <- regexpr("\\{", txt); b <- max(gregexpr("\\}", txt)[[1]])
   if (a < 0 || b < a) stop("The AI response contained no JSON object.", call. = FALSE)
   jsonlite::fromJSON(substr(txt, a, b), simplifyVector = FALSE)
+}
+
+# The exact HTTP request for a provider (shared by ipm_ai_call() and ipm_ai_preview(), so the preview is what is sent)
+ai_request <- function(st, system, user, schema = NULL, max_tokens = 8000) {
+  if (st$provider == "anthropic") {
+    body <- list(model = st$model, max_tokens = max_tokens, system = system, messages = list(list(role = "user", content = user)))
+    if (!is.null(schema)) body$output_config <- list(format = list(type = "json_schema", schema = schema))
+    return(list(url = paste0(st$base_url, "/v1/messages"), headers = c(`x-api-key` = "<API key, not shown>", `anthropic-version` = "2023-06-01"), body = body))
+  }
+  if (st$provider == "ollama") {
+    # native API: the context window is sized to the evidence (Ollama's default would silently truncate it)
+    nctx <- as.integer(min(131072, max(8192, 1024 * ceiling(((nchar(system) + nchar(user)) / 3 + max_tokens) / 1024))))
+    body <- list(model = st$model, stream = FALSE, messages = list(list(role = "system", content = system), list(role = "user", content = user)),
+                 options = list(num_ctx = nctx, temperature = 0.2, num_predict = max_tokens))
+    if (!is.null(schema)) body$format <- schema
+    # reasoning models (gemma4, qwen3, deepseek-r1...) would spend the output budget "thinking": thinking is switched off
+    body$think <- !identical(tolower(ai_env("IPM_AI_THINK", "false")), "false")
+    return(list(url = paste0(st$base_url, "/api/chat"), headers = character(), body = body))
+  }
+  body <- list(model = st$model, max_tokens = max_tokens, temperature = 0.2,
+               messages = list(list(role = "system", content = system), list(role = "user", content = user)))
+  if (!is.null(schema)) body$response_format <- list(type = "json_schema", json_schema = list(name = "ipm_output", strict = TRUE, schema = schema))
+  list(url = paste0(st$base_url, "/chat/completions"), headers = if (nzchar(st$api_key)) c(Authorization = "Bearer <API key, not shown>") else character(), body = body)
 }
 
 #' Low-level call to the configured model
@@ -261,10 +331,9 @@ ipm_ai_call <- function(st, system, user, schema = NULL, max_tokens = 8000) {
   }
   base_req <- function(url) httr2::request(url) |> httr2::req_timeout(st$timeout) |>
     httr2::req_retry(max_tries = 3, is_transient = function(r) httr2::resp_status(r) %in% c(429, 500, 502, 503, 529), backoff = function(i) 5 * i)
+  rq <- ai_request(st, system, user, schema, max_tokens); body <- rq$body
   if (st$provider == "anthropic") {
-    body <- list(model = st$model, max_tokens = max_tokens, system = system, messages = list(list(role = "user", content = user)))
-    if (!is.null(schema)) body$output_config <- list(format = list(type = "json_schema", schema = schema))
-    req <- base_req(paste0(st$base_url, "/v1/messages")) |>
+    req <- base_req(rq$url) |>
       httr2::req_headers(`x-api-key` = st$api_key, `anthropic-version` = "2023-06-01") |>
       httr2::req_body_raw(ai_json(body), type = "application/json")
     out <- send(req)
@@ -274,28 +343,18 @@ ipm_ai_call <- function(st, system, user, schema = NULL, max_tokens = 8000) {
     return(list(text = txt, usage = list(input = out$usage$input_tokens, output = out$usage$output_tokens), model = out$model %||% st$model))
   }
   if (st$provider == "ollama") {
-    # native API: the context window is sized to the evidence (Ollama's default would silently truncate it)
-    nctx <- as.integer(min(131072, max(8192, 1024 * ceiling(((nchar(system) + nchar(user)) / 3 + max_tokens) / 1024))))
-    body <- list(model = st$model, stream = FALSE, messages = list(list(role = "system", content = system), list(role = "user", content = user)),
-                 options = list(num_ctx = nctx, temperature = 0.2, num_predict = max_tokens))
-    if (!is.null(schema)) body$format <- schema
-    # reasoning models (gemma4, qwen3, deepseek-r1...) would spend the output budget "thinking": switch thinking off,
-    # and retry without the flag for models/servers that do not accept it
-    body$think <- !identical(tolower(ai_env("IPM_AI_THINK", "false")), "false")
-    req_of <- function(b) base_req(paste0(st$base_url, "/api/chat")) |> httr2::req_body_raw(ai_json(b), type = "application/json")
+    req_of <- function(b) base_req(rq$url) |> httr2::req_body_raw(ai_json(b), type = "application/json")
+    # retry without the thinking flag for models/servers that do not accept it
     out <- tryCatch(send(req_of(body)), ipm_ai_http_error = function(e) {
       if (isTRUE(e$status == 400) && grepl("think", conditionMessage(e), ignore.case = TRUE)) { body$think <- NULL; send(req_of(body)) } else stop(e) })
     if (identical(out$done_reason, "length"))
       stop(if (!nzchar(out$message$content %||% "")) "The model used its whole output budget without answering (reasoning model?). Set IPM_AI_THINK=false or choose another model."
            else "The AI response was cut off (output limit reached).", call. = FALSE)
     return(list(text = out$message$content %||% "", usage = list(input = out$prompt_eval_count %||% NA, output = out$eval_count %||% NA),
-                model = out$model %||% st$model, num_ctx = nctx))
+                model = out$model %||% st$model, num_ctx = body$options$num_ctx))
   }
   # OpenAI-compatible (vLLM, LM Studio, llama.cpp server, OpenAI, Azure OpenAI through a /v1-compatible gateway)
-  body <- list(model = st$model, max_tokens = max_tokens, temperature = 0.2,
-               messages = list(list(role = "system", content = system), list(role = "user", content = user)))
-  if (!is.null(schema)) body$response_format <- list(type = "json_schema", json_schema = list(name = "ipm_output", strict = TRUE, schema = schema))
-  mk <- function(b) { r <- base_req(paste0(st$base_url, "/chat/completions")) |> httr2::req_body_raw(ai_json(b), type = "application/json")
+  mk <- function(b) { r <- base_req(rq$url) |> httr2::req_body_raw(ai_json(b), type = "application/json")
     if (nzchar(st$api_key)) r <- httr2::req_auth_bearer_token(r, st$api_key); r }
   out <- tryCatch(send(mk(body)), ipm_ai_http_error = function(e) {
     if (!is.null(schema) && isTRUE(e$status == 400)) { body$response_format <- list(type = "json_object"); send(mk(body)) } else stop(e) })
@@ -355,13 +414,10 @@ ipm_validate_plan <- function(plan, sc, evidence_json) {
 #' @export
 ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), language = "English", max_teams = 30) {
   if (!isTRUE(st$ready)) { p <- ipm_plan_rules(sc); p$note <- "No AI provider configured: rule-based plan."; return(p) }
-  ev <- ipm_ai_evidence(res, sc, max_teams = max_teams)
-  evj <- ai_json(ev)
-  user <- paste0("Evidence (JSON):\n", evj, "\n\nWrite the action plan. Include every team whose rule-based priority is High or Medium, and any other team you consider needs action; ",
-                 "list survey-wide question/module problems separately. Use at most 6 issues and 5 actions per team.")
+  pr <- ai_plan_prompt(res, sc, language, max_teams); evj <- pr$evidence_json
   if (st$provider == "mock") attr(st, "mock_text") <- ai_json(ipm_plan_rules(sc, max_teams))
   t0 <- Sys.time()
-  out <- ipm_ai_call(st, ai_system_prompt(language), user, schema = ipm_plan_schema(), max_tokens = 16000)
+  out <- ipm_ai_call(st, pr$system, pr$user, schema = pr$schema, max_tokens = pr$max_tokens)
   plan <- ai_extract_json(out$text)
   for (f in c("survey_wide_issues", "most_problematic_modules", "teams", "caveats")) plan[[f]] <- plan[[f]] %||% list()
   plan <- ipm_validate_plan(plan, sc, evj)
@@ -380,16 +436,9 @@ ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), la
 #' @export
 ipm_ai_ask <- function(question, res, sc = ipm_scorecard(res), st = ipm_ai_settings(), history = list(), language = "English") {
   if (!isTRUE(st$ready)) stop("No AI provider is configured.", call. = FALSE)
-  labs <- sc$teams$team_label
-  hit <- labs[vapply(labs, function(l) grepl(paste0("(^|[^A-Za-z0-9])", l, "([^0-9]|$)"), question, ignore.case = TRUE) ||
-                                      grepl(paste0("team\\s*", sub("^\\D*", "", l), "([^0-9]|$)"), question, ignore.case = TRUE), logical(1))]
-  ev <- ipm_ai_evidence(res, sc, team = if (length(hit)) hit[1] else NULL)
-  hist <- paste(vapply(utils::tail(history, 4), function(h) sprintf("Q: %s\nA: %s", h$q, h$a), ""), collapse = "\n\n")
-  user <- paste0("Evidence (JSON):\n", ai_json(ev), if (nzchar(hist)) paste0("\n\nEarlier questions in this session:\n", hist) else "",
-                 "\n\nQuestion: ", question,
-                 "\n\nAnswer in a few short paragraphs or bullet points (markdown). Quote the numbers from the evidence. If the evidence does not contain the answer, say so and say which IPM output or flag table to look at.")
+  pr <- ai_ask_prompt(question, res, sc, history, language); hit <- pr$team
   if (st$provider == "mock") attr(st, "mock_text") <- sprintf("Mock answer about %s.", if (length(hit)) hit[1] else "the survey")
-  out <- ipm_ai_call(st, ai_system_prompt(language), user, max_tokens = 3000)
+  out <- ipm_ai_call(st, pr$system, pr$user, max_tokens = pr$max_tokens)
   list(answer = out$text, usage = out$usage, model = out$model, team = if (length(hit)) hit[1] else NA_character_)
 }
 

@@ -202,7 +202,7 @@ ipm_ui <- page_navbar(
         tags$h5(class = "sch", "Interviewers"), DT::DTOutput("sc_interv")),
       nav_panel("Action plan (AI)", value = "ai",
         explain(tagList("Writes a team-by-team action plan (issues with evidence, actions with owner and timing, interviewers to observe, modules to retrain) and answers questions about the results. ",
-                        tags$b("Only aggregated statistics are sent to the AI model"), " - the team scorecard, flag rates per module and question, one-line readings of flagged questions, interviewer codes. No record-level data, household identifiers or names leave the server; click 'Preview data sent' to see exactly what is sent. Without AI, the rule-based plan gives the same structure from the standard action library."),
+                        tags$b("Only aggregated statistics are sent to the AI model"), " - the team scorecard, flag rates per module and question, one-line readings of flagged questions, interviewer codes. No record-level data, household identifiers or names leave the server; click 'Preview what is sent to the AI' to see the full request (instructions, evidence and question) exactly as it is sent. Without AI, the rule-based plan gives the same structure from the standard action library."),
                 "Click 'Generate AI action plan' (30 seconds to 2 minutes) or 'Rule-based plan'. Check the plan against the flag tables before sharing it, especially any line marked 'check'. Download it in Word for the supervisors' debrief."),
         layout_columns(col_widths = c(4, 8),
           card(card_header("AI model and action plan"),
@@ -221,7 +221,7 @@ ipm_ui <- page_navbar(
             selectInput("ai_lang", "Language of the plan", c("English", "French", "Spanish", "Portuguese", "Arabic"), width = "100%"),
             actionButton("ai_go", "Generate AI action plan", class = "btn-primary", width = "100%"),
             actionButton("rules_go", "Rule-based plan (no AI)", width = "100%"),
-            actionButton("ai_preview", "Preview data sent to the AI", width = "100%"),
+            actionButton("ai_preview", "Preview what is sent to the AI", width = "100%"),
             downloadButton("plan_dl", "Download action plan (Word)", style = "width:100%")),
           card(card_header("Ask a question about the results"),
             uiOutput("chat"),
@@ -272,7 +272,7 @@ ipm_server <- function(input, output, session) {
   sdir <- file.path(tempdir(), paste0("ipm_", session$token)); dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
   upload_dirs <- character()                       # Shiny's own temporary copies of uploaded files
   rv <- reactiveValues(cfg = NULL, light = NULL, res = NULL, log = character(), report = NULL, zip = NULL, n_files = 0,
-                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL)
+                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL)
   cleanup <- function() {
     wipe(c(sdir, upload_dirs))
     isolate({ rv$cfg <- NULL; rv$light <- NULL; rv$res <- NULL; rv$report <- NULL; rv$zip <- NULL
@@ -638,14 +638,36 @@ ipm_server <- function(input, output, session) {
   })
   observeEvent(input$ai_preview, {
     if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
-    ev <- ipm_ai_evidence(rv$res, rv$sc)
-    n <- nchar(jsonlite::toJSON(ev, auto_unbox = TRUE, null = "null", na = "null", digits = NA))
-    j <- jsonlite::toJSON(ev, auto_unbox = TRUE, null = "null", na = "null", digits = NA, pretty = TRUE)
-    showModal(modalDialog(title = "Data sent to the AI model", size = "l", easyClose = TRUE,
-      p(class = "small-note", sprintf("%s characters (about %s tokens). Aggregated statistics only: no record-level data, no household identifiers, no names. Plus a fixed instruction text describing the task.",
-                                      format(n, big.mark = ","), format(n %/% 4, big.mark = ","))),
-      tags$pre(class = "json", j), footer = modalButton("Close")))
+    st <- ai_st(); q <- trimws(input$ai_q %||% "")
+    rv$prev <- list(plan = ipm_ai_preview(rv$res, rv$sc, st, "plan", language = input$ai_lang),
+                    question = ipm_ai_preview(rv$res, rv$sc, st, "question", question = if (nzchar(q)) q else "Which team should the coordinator visit first, and why?",
+                                              history = rv$chat, language = input$ai_lang))
+    one <- function(pv, id, what) {
+      ctx <- pv$body$options$num_ctx
+      tagList(
+        tags$table(class = "table table-sm", style = "width:auto; font-size:0.86em",
+          tags$tr(tags$td(tags$b("Sent to")), tags$td(sprintf("POST %s", pv$url))),
+          tags$tr(tags$td(tags$b("Model")), tags$td(pv$model)),
+          if (length(pv$headers)) tags$tr(tags$td(tags$b("Headers")), tags$td(paste(names(pv$headers), pv$headers, sep = ": ", collapse = " | "))),
+          tags$tr(tags$td(tags$b("Size")), tags$td(sprintf("%s characters, about %s tokens: instructions %s, evidence + request %s, answer format %s characters",
+                                                              format(pv$chars, big.mark = ","), format(pv$tokens_estimate, big.mark = ","), format(pv$parts[["instructions"]], big.mark = ","),
+                                                              format(pv$parts[["evidence_and_request"]], big.mark = ","), format(pv$parts[["answer_format"]], big.mark = ",")))),
+          tags$tr(tags$td(tags$b("Answer limit")), tags$td(sprintf("%s tokens%s", format(pv$max_output_tokens, big.mark = ","),
+                                                                  if (!is.null(ctx)) sprintf("; Ollama context window requested: %s tokens (input + answer)", format(ctx, big.mark = ",")) else "")))),
+        p(class = "small-note", what),
+        downloadButton(id, "Download this request (JSON)", class = "btn-sm"),
+        tags$pre(class = "json", style = "margin-top:8px", pv$json))
+    }
+    showModal(modalDialog(title = "Exactly what is sent to the AI model", size = "xl", easyClose = TRUE,
+      p(class = "small-note", "This is the full request, built by the same code that sends it: the instructions (system prompt), the evidence (aggregated statistics only - no record-level data, household identifiers or names), the request and, for the plan, the required answer format. The API key is sent in a header and is never shown."),
+      navset_tab(
+        nav_panel("Action plan request", one(rv$prev$plan, "prev_dl_plan", "Sent when you click 'Generate AI action plan'.")),
+        nav_panel("Question request", one(rv$prev$question, "prev_dl_q",
+          "Sent when you click 'Ask', here with the question in the box (or an example). Naming a team adds its flag tables; the last 4 questions and answers of the session are included."))),
+      footer = modalButton("Close")))
   })
+  output$prev_dl_plan <- downloadHandler(filename = function() "ipm_ai_request_plan.json", content = function(f) writeLines(rv$prev$plan$json, f))
+  output$prev_dl_q <- downloadHandler(filename = function() "ipm_ai_request_question.json", content = function(f) writeLines(rv$prev$question$json, f))
   observeEvent(input$ai_go, {
     if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st()

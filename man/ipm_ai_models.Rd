@@ -10,7 +10,7 @@ ipm_ai_models(st)
 \item{st}{settings from ipm_ai_settings()}
 }
 \value{
-character vector of model names
+character vector of model names (Ollama: largest first)
 }
 \description{
 Models available on a connection

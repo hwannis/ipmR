@@ -1,3 +1,7 @@
+# ipmR (development version)
+
+* AI preview now shows exactly what is sent to the model, built by the same code that sends it: endpoint, model, headers (key hidden), the instructions (system prompt), the evidence, the request and the required answer format, for the action plan and for a question, with sizes, token estimate, answer limit and Ollama context window; downloadable as JSON (`ipm_ai_preview()`).
+
 # ipmR 0.4.5
 
 * Fieldwork dates: the app shows the first and last interview found in the household questionnaire (Data and Settings pages, results, report), so the period of analysis can be set knowingly.
