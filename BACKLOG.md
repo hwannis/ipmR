@@ -48,3 +48,7 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 16 | Preview only showed the evidence block, not the full request: now shows the exact request (endpoint, model, instructions, evidence, request, answer format, sizes, Ollama context window) for the plan and for a question, downloadable as JSON. | HW | done (dev) |
 | 17 | Switching connection (e.g. Claude to Ollama) can keep the previous connection's model name until the model list loads; reset the model at once and never send a model name from another connection. | CL | open |
 | 18 | Compact evidence mode for local models (High/Medium teams only, fewer readings): about a third of the size. | HW | open |
+| 19 | Number check gives false alarms on ranges: "5-16%" is read as the numbers 5 and -16 ("number(s) -16, -95 not found"). Read ranges as two positive numbers. | CL (gemma4 test) | open |
+| 20 | Plan display shows "hh EU hh EU" when the model puts the module in both the dataset and module fields; normalise before display. | CL (gemma4 test) | open |
+| 21 | Check that every High/Medium team of the scorecard is in the AI plan, and list the ones the model left out. | CL (gemma4 test) | open |
+
