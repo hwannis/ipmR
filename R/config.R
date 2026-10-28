@@ -377,16 +377,22 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
     extras$ant <- list(dataset = a, height = "AN11", flags = fl)
   }
   teams <- derive_team_ranges(data_dir, ds, meta, qinfo)
-  st <- NULL
+  st <- NULL; fw <- NULL
   if (!is.null(hhq)) {
     d <- ds[[hhq]]; v <- meta[[hhq]]$vars; i <- match(d$day, v)
     hh <- read_any_cols(file.path(data_dir, meta[[hhq]]$file), v[i:(i + 2)])
     dd <- as.Date(sprintf("%04d-%02d-%02d", as.integer(hh[[3]]), as.integer(hh[[2]]), as.integer(hh[[1]])), optional = TRUE)
-    if (any(!is.na(dd))) st <- format(max(min(dd, na.rm = TRUE), max(dd, na.rm = TRUE) - 20))
+    if (any(!is.na(dd))) {
+      first <- min(dd, na.rm = TRUE); last <- max(dd, na.rm = TRUE)
+      st <- format(max(first, last - 20))                       # default: the last 21 days of fieldwork
+      fw <- list(first = format(first), last = format(last), days = as.integer(last - first) + 1L,
+                 interviews = sum(!is.na(dd)), source = meta[[hhq]]$file)
+    }
   }
   cfg <- list(
     survey_name = survey_name, data_dir = data_dir, results_dir = file.path(data_dir, "ipm_results"),
     period = list(start = st, days = 21),
+    fieldwork = fw,                                              # dates found in the household questionnaire (information)
     teams = teams,
     outputs = as.list(stats::setNames(rep(TRUE, length(ipm_output_names)), names(ipm_output_names))),
     hhm_groups = names(hhm_group_defs),

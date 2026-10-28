@@ -70,6 +70,10 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   doc <- add_text(doc, sprintf("Produced with ipmR %s (R port of the Stata IPM application v7.0.0 by Pierre Martel).", utils_pkgver()), 8, TRUE)
   doc <- add_text(doc, "Outputs included in this report:", 10)
   for (id in names(res$outputs)) doc <- add_text(doc, paste("-", ipm_output_names[[id]]), 9)
+  if (!is.null(res$data_summary) && nrow(res$data_summary)) {
+    fd <- suppressWarnings(range(as.Date(c(res$data_summary$first_day, res$data_summary$last_day)), na.rm = TRUE))
+    if (all(is.finite(fd))) doc <- add_text(doc, sprintf("Fieldwork covered by the data: %s to %s (%d days).", format(fd[1], "%d %b %Y"), format(fd[2], "%d %b %Y"), as.integer(diff(fd)) + 1L), 9)
+  }
   if (!is.null(cfg$period$start)) doc <- add_text(doc, sprintf("Period of analysis for anthropometry case listing and flag analysis: %s", period_bounds(cfg)$label), 9)
   # key findings
   progress("Writing report: key findings")
@@ -165,7 +169,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.4.4"
+IPMR_VERSION <- "0.4.5"
 utils_pkgver <- function() IPMR_VERSION
 
 report_flags <- function(doc, r, res, figdir, o, results_dir) {

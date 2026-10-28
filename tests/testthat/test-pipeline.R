@@ -87,3 +87,12 @@ test_that("slim loading gives the same flag results as full loading", {
   f2 <- flag_analysis(p2, make_plots = FALSE, make_tables = FALSE)$tests
   expect_equal(f1$p, f2$p)
 })
+
+test_that("auto-config reports the fieldwork dates and proposes the last 21 days", {
+  cfg <- mics7_autoconfig(make_synth(), "Synthetic")
+  fw <- cfg$fieldwork
+  expect_identical(fw$source, "hh.sav")
+  expect_true(fw$first >= "2026-01-05" && fw$last <= "2026-02-01")
+  expect_equal(fw$days, as.integer(as.Date(fw$last) - as.Date(fw$first)) + 1L)
+  expect_identical(cfg$period$start, format(max(as.Date(fw$first), as.Date(fw$last) - 20)))
+})

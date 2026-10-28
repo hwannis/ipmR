@@ -1,3 +1,9 @@
+# ipmR 0.4.5
+
+* Fieldwork dates: the app shows the first and last interview found in the household questionnaire (Data and Settings pages, results, report), so the period of analysis can be set knowingly.
+* Settings: buttons to set the period to the last 7, 14 or 21 days or the whole fieldwork, and a line showing the exact dates analysed (and any days left out at the end).
+* Clarified that the proposed period is the last 21 days up to the last interview (or the whole fieldwork if shorter).
+
 # ipmR 0.4.4
 
 * Fix: uploading datasets whose variable labels (or formats) are stored as several strings failed with "values must be length 1". Read errors now name the file.

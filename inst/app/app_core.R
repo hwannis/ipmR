@@ -31,6 +31,10 @@ folder_input <- function(id, label) {
 }
 
 howto <- ipm_howto()
+fmt_d <- function(x) format(as.Date(x), "%d %b %Y")
+fw_text <- function(fw) if (is.null(fw)) NULL else
+  sprintf("Fieldwork in the data (%s): first interview %s, last interview %s - %d days, %s interviews.",
+          fw$source %||% "household questionnaire", fmt_d(fw$first), fmt_d(fw$last), as.integer(fw$days), format(fw$interviews, big.mark = ","))
 AI_CONNS <- tryCatch(ipm_ai_connections(), error = function(e) { message("AI settings: ", conditionMessage(e)); list() })   # server connections (keys stay on the server)
 AI_CUSTOM <- ipm_ai_allow_custom()
 AI_CHOICES <- c(stats::setNames(names(AI_CONNS), vapply(AI_CONNS, function(x) x$label, "")),
@@ -116,6 +120,10 @@ ipm_ui <- page_navbar(
         textInput("survey_name", "Name of the survey", width = "100%"),
         fluidRow(column(6, dateInput("period_start", "Period of analysis: first day", value = Sys.Date() - 21)),
                  column(6, numericInput("period_days", "Extent (days)", value = 21, min = 1))),
+        div(style = "margin:-6px 0 8px 0", tags$span(class = "small-note", "Set to: "),
+            actionButton("pp_7", "Last 7 days", class = "btn-sm"), actionButton("pp_14", "Last 14 days", class = "btn-sm"),
+            actionButton("pp_21", "Last 21 days", class = "btn-sm"), actionButton("pp_all", "Whole fieldwork", class = "btn-sm")),
+        uiOutput("period_info"),
         checkboxGroupInput("outputs", "Outputs", choices = stats::setNames(names(output_names), output_names), width = "100%"),
         checkboxGroupInput("hhm_groups", "Household member groups (output 4)", inline = TRUE,
                            choices = stats::setNames(names(hhm_defs), vapply(hhm_defs, `[[`, "", "label")))),
@@ -345,7 +353,7 @@ ipm_server <- function(input, output, session) {
     req(rv$cfg); cfg <- read_config(input$cfg_upload$datapath)
     keep <- intersect(names(cfg$datasets), names(rv$cfg$datasets))
     if (!length(keep)) { showNotification("The settings file does not match the uploaded datasets.", type = "error"); return() }
-    cfg$datasets <- cfg$datasets[keep]; apply_cfg(cfg)
+    cfg$datasets <- cfg$datasets[keep]; cfg$fieldwork <- rv$cfg$fieldwork; apply_cfg(cfg)
     showNotification("Settings loaded.", type = "message")
   })
 
@@ -354,8 +362,34 @@ ipm_server <- function(input, output, session) {
     if (is.null(cfg)) return(p(class = "small-note", "No data loaded yet."))
     q <- names(cfg$datasets)[vapply(cfg$datasets, function(d) !is.null(d$result), logical(1))]
     div(div(class = "bignum", sprintf("%d files, %d questionnaires, %d teams", length(cfg$datasets), length(q), length(cfg$teams$ranges %||% character()))),
-        p(sprintf("Period of analysis proposed: %s (+%s days). Outputs available: %d of 9.", cfg$period$start %||% "-", cfg$period$days, sum(unlist(cfg$outputs)))))
+        if (!is.null(cfg$fieldwork)) p(tags$b(fw_text(cfg$fieldwork))),
+        p(sprintf("Period of analysis proposed: from %s, %s days (%s; change it on the next page). Outputs available: %d of 9.",
+                  if (is.null(cfg$period$start)) "-" else fmt_d(cfg$period$start), cfg$period$days,
+                  if (!is.null(cfg$fieldwork) && cfg$fieldwork$days <= 21) "the whole fieldwork so far" else "the last 3 weeks of fieldwork",
+                  sum(unlist(cfg$outputs)))))
   })
+  set_period <- function(n = NULL) {
+    fw <- rv$cfg$fieldwork; if (is.null(fw)) { showNotification("No interview dates found in the household questionnaire.", type = "warning"); return() }
+    last <- as.Date(fw$last); first <- as.Date(fw$first)
+    if (is.null(n)) { st <- first; n <- as.integer(fw$days) } else st <- max(first, last - (n - 1))
+    updateDateInput(session, "period_start", value = st); updateNumericInput(session, "period_days", value = n)
+  }
+  observeEvent(input$pp_7, set_period(7)); observeEvent(input$pp_14, set_period(14))
+  observeEvent(input$pp_21, set_period(21)); observeEvent(input$pp_all, set_period(NULL))
+  output$period_info <- renderUI({
+    fw <- rv$cfg$fieldwork; st <- input$period_start; n <- input$period_days
+    if (is.null(fw)) return(p(class = "small-note", "Interview dates are shown here once the data are loaded."))
+    first <- as.Date(fw$first); last <- as.Date(fw$last)
+    msg <- if (length(st) && !is.na(st) && length(n) && !is.na(n)) {
+      en <- st + n                                                  # as in the Stata IPM: start to start + extent, both included
+      if (st > last) tags$span(style = "color:#E2231A", "The period starts after the last interview: there are no data to analyse.")
+      else if (en < first) tags$span(style = "color:#E2231A", "The period ends before the first interview: there are no data to analyse.")
+      else sprintf("Period analysed: %s to %s%s.", fmt_d(max(st, first)), fmt_d(min(en, last)),
+                   if (en < last) sprintf(" - the last %d day(s) of fieldwork are not included", as.integer(last - en)) else " (up to the last interview)")
+    }
+    div(class = "small-note", style = "margin-bottom:10px", div(fw_text(fw)), div(msg))
+  })
+
   output$found_tbl <- renderTable({
     cfg <- rv$cfg; req(cfg)
     rbindlist(lapply(names(cfg$datasets), function(n) { d <- cfg$datasets[[n]]
@@ -511,6 +545,7 @@ ipm_server <- function(input, output, session) {
         k(sum(!is.na(unique(res$team_info$team))), "teams defined"),
         if (!is.null(fa$tests)) k(format(nrow(fa$tests), big.mark = ","), "flag tests"),
         if (!is.null(fa$tests)) k(sprintf("%.1f%%", mean(fa$tests$flag) * 100), "of tests flagged (0.1% expected by chance)"),
+        k(sprintf("%s - %s", fmt_d(min(as.Date(res$data_summary$first_day), na.rm = TRUE)), fmt_d(max(as.Date(res$data_summary$last_day), na.rm = TRUE))), "fieldwork: first - last interview"),
         if (!is.null(fa$period)) k(fa$period, "period of analysis"))
   })
   output$narrative <- renderUI({
