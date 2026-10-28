@@ -40,6 +40,8 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | # | Issue | Source | Status |
 |---|---|---|---|
 | 14 | "Build report and files" is cut by the connection on shinyapps.io (limited account); make the build robust (background task, progress, partial downloads). | PM | open |
+| 23 | The idle timeout counts a long report build or run as inactivity: if the user does not touch the page for 30 min while it runs, the session (and the finished report) is deleted when the build ends. Treat a running task as activity. | CL | open |
+| 24 | Report build: the progress bar stays on "Writing report: flaganal" for many minutes with no detail; show progress inside the flag section (dataset, team, number of tables written). | HW | open |
 | 15 | A long run or AI call blocks every other user of the same server (single R process): run them as background tasks. | CL | open |
 
 ## AI
