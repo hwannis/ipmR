@@ -65,3 +65,4 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 28 | Height heaping by measurer (AN7), not only by team: that is what teams act on. | HW | open |
 | 29 | Foundational learning (FL) checks: assessment duration, no attempt, story reached, practice-question exits. | HW | open |
 | 30 | The "x times what chance would produce" headline overstates the effect (sparse cells, non-independent tests); reword and explain. | HW | open |
+| 31 | The app does not show its version: add "ipmR x.y.z" to the header or footer so users can check which release the server runs. | HW | open |
