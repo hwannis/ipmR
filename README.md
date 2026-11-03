@@ -139,7 +139,7 @@ The release asset `ipm_shinyapp.zip` (built from `inst/shinyapps/` by `deploy/sh
 2. **Settings & outputs.** Survey name, period of analysis, outputs to produce, and the variables for the household members, birth history and anthropometry outputs.
 3. **Datasets.** Check the variables mapped for each file.
 4. **Teams.** Check which interviewers are in which team.
-5. **Flag settings.** Modules to test and variables to ignore.
+5. **Flag settings.** Modules to test (including the initial module of each questionnaire) and variables to ignore, picked from the list of variables; **Check flag settings** lists every variable with its label and status, as in the Stata application.
 6. **Run.** Runs everything. You can also save or load the settings file.
 7. **Results:**
    - **Summary & priorities:** automatic narrative covering overall flag level, most problematic modules and questions, teams to target and on which modules, interviewers to observe with examples, and other warning signs. It also shows the team × module heatmap and the flag rates by team and by interviewer.

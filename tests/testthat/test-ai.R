@@ -144,3 +144,23 @@ test_that("the preview is byte-for-byte the request that is sent", {
   expect_match(pq$json, "Question: What about team 1")
   expect_true(all(c("instructions", "evidence_and_request", "answer_format") %in% names(pv$parts)))
 })
+
+test_that("ranges are not read as negative numbers; module labels are normalised; missing teams are listed", {
+  expect_equal(num_tokens("5-16% NO vs 93-95%; -3.5"), c(5, 16, 93, 95, -3.5))
+  expect_length(num_tokens("none"), 0)
+  res <- synth_res(); sc <- ipm_scorecard(res)
+  hm <- sc$teams[priority %in% c("High", "Medium"), team_label]
+  plan <- list(teams = list(), most_problematic_modules = list(list(dataset = "hh EU", module = "hh EU", why = "", action = ""),
+                                                              list(dataset = "wm", module = "wm MD", why = "", action = "")))
+  v <- ipm_validate_plan(plan, sc, "{}")
+  expect_identical(vapply(v$most_problematic_modules, function(m) paste(m$dataset, m$module), ""), c("hh EU", "wm MD"))
+  expect_identical(v$most_problematic_modules[[1]]$module, "EU")
+  expect_identical(v$missing_teams, hm)
+})
+
+test_that("the summary lists highly flagged questions and questions flagged per module", {
+  res <- synth_res(); s <- ipm_summary(res)
+  expect_true("highly" %in% names(s$sections))
+  expect_true(all(c("q_tested", "q_flagged", "q_highly") %in% names(s$tables$modules)))
+  expect_true(any(grepl("questions flagged at least once", s$sections$modules$bullets)))
+})

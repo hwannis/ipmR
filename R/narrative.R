@@ -52,19 +52,38 @@ ipm_summary <- function(res) {
                                         paste(none, collapse = ", "), o$test_min))
     secs$overall <- list(title = "Overall", bullets = b)
 
+    # highly flagged questions (as in the Stata report): the most direct pointer to what needs attention
+    qq <- t[, .(rate = mean(flag) * 100, tests = .N, flags = sum(flag), desc = vardesc[1], teams = uniqueN(team), teams_flagged = uniqueN(team[flag == 1]),
+                interviewers_flagged = uniqueN(interv[flag == 1])), by = .(dataset, mod, varname)]
+    hq <- qq[rate >= o$highly_flag & flags >= 2][order(-rate, -flags)]
+    tabs$highly <- hq
+    bq <- if (nrow(hq)) c(
+      sprintf("%d question(s) have %s%% or more of their tests flagged. These are the first things to check, in the flag tables (tab 'Flag explorer' or 'Flag tables by team'):", nrow(hq), fmt_int(o$highly_flag)),
+      sprintf("%s %s '%s': %s of tests flagged (%d of %d); flagged in %d of %d teams, %d interviewer(s)%s.",
+              head(hq$dataset, 25), head(hq$varname, 25), substr(head(hq$desc, 25), 1, 60), pct1(head(hq$rate, 25)), head(hq$flags, 25), head(hq$tests, 25),
+              head(hq$teams_flagged, 25), head(hq$teams, 25), head(hq$interviewers_flagged, 25),
+              ifelse(head(hq$teams_flagged / hq$teams, 25) >= 0.5, " - many teams: question, translation or training problem", "")),
+      if (nrow(hq) > 25) sprintf("... and %d more (full list in the report).", nrow(hq) - 25))
+      else sprintf("No question has %s%% or more of its tests flagged.", fmt_int(o$highly_flag))
+    secs$highly <- list(title = sprintf("Highly flagged questions (%s%% or more of tests flagged)", fmt_int(o$highly_flag)), bullets = bq)
+
     # modules
     ms <- t[, .(rate = mean(flag) * 100, tests = .N, flags = sum(flag), teams_flagged = uniqueN(team[flag == 1]), teams = uniqueN(team)), by = .(dataset, mod)]
-    ms <- ms[tests >= 30][order(-rate)]
+    mq <- qq[, .(q_tested = .N, q_flagged = sum(flags > 0), q_highly = sum(rate >= o$highly_flag & flags >= 2)), by = .(dataset, mod)]
+    ms <- merge(ms, mq, by = c("dataset", "mod"))
+    ms <- ms[tests >= 30][order(-q_highly, -rate)]
     qs <- t[, .(rate = mean(flag) * 100, tests = .N, desc = vardesc[1]), by = .(dataset, mod, varname)]
-    top <- head(ms[rate >= max(2 * R, 3)], 6); if (!nrow(top)) top <- head(ms, 3)
+    # a long module can have several highly flagged questions "diluted" in a low overall %: keep it too
+    top <- head(ms[rate >= max(2 * R, 3) | q_highly >= 2], 8); if (!nrow(top)) top <- head(ms, 3)
     bm <- vapply(seq_len(nrow(top)), function(i) {
       m <- top[i]; q <- qs[dataset == m$dataset & mod == m$mod][order(-rate)][rate >= o$highly_flag | seq_len(.N) <= 2][seq_len(min(.N, 3))]
-      sprintf("%s module %s (%s): %s of tests flagged, %d of %d teams affected. Most flagged questions: %s.",
+      sprintf("%s module %s (%s): %d of %d questions flagged at least once, %d highly flagged; %s of tests flagged, %d of %d teams affected. Most flagged questions: %s.",
               m$dataset, m$mod, if (m$teams_flagged / m$teams >= 0.5) "survey-wide problem - review the question wording/training with all teams" else "problem concentrated in some teams",
-              pct1(m$rate), m$teams_flagged, m$teams,
+              m$q_flagged, m$q_tested, m$q_highly, pct1(m$rate), m$teams_flagged, m$teams,
               paste(sprintf("%s '%s' (%.0f%%)", q$varname, substr(q$desc, 1, 60), q$rate), collapse = "; "))
     }, "")
-    secs$modules <- list(title = "Most problematic modules", bullets = bm)
+    secs$modules <- list(title = "Modules with the most flagged questions", bullets = c(bm,
+      "The % of tests flagged in a module depends on its length: a short module can be pushed up by one question, a long one can hide several highly flagged questions. Read it together with the number of flagged questions."))
     tabs$modules <- ms
 
     # teams
@@ -79,14 +98,16 @@ ipm_summary <- function(res) {
       mods <- tm[team == h$team & flags >= 3 & rate >= 2 * mrate][order(-rate)][seq_len(min(.N, 4))]
       ints <- iv[team == h$team][order(-rate)]
       mates <- ints[rate >= 1.5 * h$rate & flags >= 3]
-      sprintf("Team %s: %s of tests flagged (survey %s). Modules to target: %s.%s",
+      qt <- t[team == h$team & flag == 1, .(n_int = uniqueN(interv), desc = vardesc[1]), by = .(dataset, varname)][order(-n_int)][seq_len(min(.N, 5))]
+      sprintf("Team %s: %s of tests flagged (survey %s). Questions to target: %s. Modules: %s.%s",
               tl(h$team), pct1(h$rate), pct1(R),
+              if (nrow(qt)) paste(sprintf("%s %s '%s'%s", qt$dataset, qt$varname, substr(qt$desc, 1, 40), ifelse(qt$n_int > 1, sprintf(" (%d interviewers)", qt$n_int), "")), collapse = "; ") else "none",
               if (nrow(mods)) paste(sprintf("%s %s (%.0f%% vs %.0f%% overall)", mods$dataset, mods$mod, mods$rate, mods$mrate), collapse = ", ") else "no single module stands out",
               if (nrow(mates)) paste0(" Interviewer(s) driving it: ", paste(sprintf("%g (%.0f%%)", mates$interv, mates$rate), collapse = ", "), ".")
               else " Flags are spread across the team (team-level issue: supervision, team practices).")
     }, "")
     if (!length(bt)) bt <- "No team stands out: flags are spread evenly across teams."
-    secs$teams <- list(title = "Teams that may need refresher training or supervision", bullets = bt)
+    secs$teams <- list(title = "Teams to observe / re-interview, and questions to target", bullets = bt)
     tabs$teams <- ts[, .(team = tl(team), rate, tests, flags)]
 
     # interviewers
@@ -101,6 +122,7 @@ ipm_summary <- function(res) {
               paste(sprintf("%s - %s", qq$varname, ifelse(is.na(qq$pattern), "", qq$pattern)), collapse = " | "))
     }, "")
     if (!length(bi)) bi <- "No individual interviewer has a flag rate at least twice the survey average."
+    else bi <- c(bi, "Caution: interviewers are compared with their team-mates. An interviewer doing good work can be flagged because the others in the team record the same wrong pattern (e.g. 2 of 3 interviewers answering 'no' to skip a module). Look at the flag table: if the flagged interviewer's answers are the plausible ones, the problem is the team-mates.")
     secs$interviewers <- list(title = "Interviewers to observe / re-interview (flag rate at least twice the survey average)", bullets = bi)
     tabs$interviewers <- iv[order(-rate)][, .(team = tl(team), interv, rate, tests, flags)]
 

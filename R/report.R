@@ -122,7 +122,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
       for (tb in r$tables) { doc <- flextable::body_add_flextable(doc, ipm_flextable(tb, 7)); doc <- add_text(doc, "", 4) }
       next
     }
-    if (id == "flaganal") { doc <- report_flags(doc, r, res, figdir, o, results_dir); next }
+    if (id == "flaganal") { doc <- report_flags(doc, r, res, figdir, o, results_dir, progress); next }
     doc <- add_heading(doc, r$title, 12)
     if (!is.null(ht[[id]])) doc <- add_text(doc, paste("How to read:", ht[[id]]), 8.5, TRUE)
     for (s in r$sections) for (g in s$plots) doc <- add_plot(doc, g, figdir, o)
@@ -169,10 +169,10 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.4.5.9000"
+IPMR_VERSION <- "0.5.0"
 utils_pkgver <- function() IPMR_VERSION
 
-report_flags <- function(doc, r, res, figdir, o, results_dir) {
+report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL) {
   doc <- add_heading(doc, "FLAG ANALYSIS OF INTERVIEWER BIAS IN SPECIFIED MODULES AND DATASETS", 12)
   if (is.null(r$tests) || !nrow(r$tests)) return(add_text(doc, "No flag test could be performed (check modules, teams and period of analysis)."))
   ht <- ipm_howto()
@@ -181,8 +181,9 @@ report_flags <- function(doc, r, res, figdir, o, results_dir) {
   plots <- r$plots
   summ <- Filter(function(z) z$type == "summary", plots)
   for (z in summ) { doc <- add_plot(doc, z$plot, figdir, o); doc <- add_text(doc, paste("How to read:", ht$flag_summary), 8.5, TRUE) }
-  seen <- character()
-  for (z in Filter(function(z) z$type != "summary", plots)) {
+  seen <- character(); fp <- Filter(function(z) z$type != "summary", plots)
+  for (k in seq_along(fp)) { z <- fp[[k]]
+    if (k %% 5 == 1) progress(sprintf("Writing report: flag graphs %d of %d", k, length(fp)))
     doc <- add_plot(doc, z$plot, figdir, o)
     if (!z$type %in% seen) { doc <- add_text(doc, paste("How to read:", ht[[paste0("flag_", z$type)]]), 8.5, TRUE); seen <- c(seen, z$type) }
   }
@@ -198,7 +199,7 @@ report_flags <- function(doc, r, res, figdir, o, results_dir) {
     ft <- flextable::set_table_properties(ft, layout = "fixed")
     doc <- flextable::body_add_flextable(doc, ft)
   } else doc <- add_text(doc, "None.")
-  write_flag_tables(r, res, results_dir)
+  write_flag_tables(r, res, results_dir, progress)
   doc
 }
 
@@ -242,15 +243,21 @@ write_flag_doc <- function(groups, file, heading, period, survey) {
   invisible(file)
 }
 
-write_flag_tables <- function(r, res, results_dir) {
+write_flag_tables <- function(r, res, results_dir, progress = function(...) NULL) {
   fd <- file.path(results_dir, "flag_results"); dir.create(fd, showWarnings = FALSE)
   old <- list.files(fd, pattern = "\\.docx$", full.names = TRUE); if (length(old)) unlink(old)
   if (!length(r$tables)) return(invisible())
   tl <- res$team_info %||% res$prepared$team_info
   groups <- group_flag_tables(r$tables)
   ds <- vapply(groups, `[[`, "", "dataset"); tm <- vapply(groups, `[[`, 0, "team")
-  for (d in unique(ds)) write_flag_doc(groups[ds == d], file.path(fd, sprintf("flags_dataset_%s.docx", d)), sprintf('Flag tables: "%s" dataset', d), r$period, res$cfg$survey_name)
-  for (t in sort(unique(tm))) write_flag_doc(groups[tm == t], file.path(fd, sprintf("flags_team_%d.docx", t)),
-                                             sprintf("Flag tables: team %s", tl$team_label[match(t, tl$team)] %||% paste0("T", t)), r$period, res$cfg$survey_name)
+  for (d in unique(ds)) {
+    progress(sprintf("Writing flag tables: dataset %s (%d tables)", d, sum(ds == d)))
+    write_flag_doc(groups[ds == d], file.path(fd, sprintf("flags_dataset_%s.docx", d)), sprintf('Flag tables: "%s" dataset', d), r$period, res$cfg$survey_name)
+  }
+  for (t in sort(unique(tm))) {
+    lab <- tl$team_label[match(t, tl$team)] %||% paste0("T", t)
+    progress(sprintf("Writing flag tables: team %s (%d tables)", lab, sum(tm == t)))
+    write_flag_doc(groups[tm == t], file.path(fd, sprintf("flags_team_%d.docx", t)), sprintf("Flag tables: team %s", lab), r$period, res$cfg$survey_name)
+  }
   invisible()
 }

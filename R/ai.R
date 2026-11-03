@@ -366,7 +366,15 @@ ipm_ai_call <- function(st, system, user, schema = NULL, max_tokens = 8000) {
 
 # ---------------------------------------------------------------- plan + validation
 
-num_tokens <- function(x) { m <- regmatches(x, gregexpr("-?[0-9]+(\\.[0-9]+)?", x))[[1]]; suppressWarnings(as.numeric(m)) }
+num_tokens <- function(x) {   # "5-16%" is a range (5 and 16), not 5 and -16
+  m <- regmatches(x, gregexpr("(?<![0-9.])-?[0-9]+(\\.[0-9]+)?|(?<=[0-9])-[0-9]+(\\.[0-9]+)?", x, perl = TRUE))[[1]]
+  v <- suppressWarnings(as.numeric(m))
+  # a minus directly after a digit is a range separator
+  if (!length(m)) return(numeric())
+  pos <- gregexpr("(?<![0-9.])-?[0-9]+(\\.[0-9]+)?|(?<=[0-9])-[0-9]+(\\.[0-9]+)?", x, perl = TRUE)[[1]]
+  after_digit <- pos > 1 & substr(rep(x, length(pos)), pos - 1, pos - 1) %in% as.character(0:9) & startsWith(m, "-")
+  v[after_digit] <- abs(v[after_digit]); v
+}
 
 #' Check an AI plan against the scorecard
 #'
@@ -398,6 +406,17 @@ ipm_validate_plan <- function(plan, sc, evidence_json) {
     keep[[length(keep) + 1]] <- t
   }
   plan$teams <- keep
+  # teams the scorecard puts at High/Medium priority that the model left out
+  want <- sc$teams[priority %in% c("High", "Medium"), team_label]
+  missing <- setdiff(want, vapply(keep, function(t) t$team, ""))
+  if (length(missing)) warn <- c(warn, sprintf("Not in the plan although High/Medium priority in the scorecard: %s.", paste(missing, collapse = ", ")))
+  plan$missing_teams <- missing
+  # "hh EU" put in both fields -> dataset "hh", module "EU"
+  plan$most_problematic_modules <- lapply(plan$most_problematic_modules %||% list(), function(m) {
+    ds <- trimws(m$dataset %||% ""); md <- trimws(m$module %||% "")
+    if (nzchar(ds) && startsWith(md, paste0(ds, " "))) md <- trimws(substring(md, nchar(ds) + 2))
+    if (identical(ds, md) && grepl(" ", ds)) { ds <- sub(" .*", "", md); md <- sub("^[^ ]+ ", "", md) }
+    m$dataset <- ds; m$module <- md; m })
   plan$validation <- warn
   plan
 }

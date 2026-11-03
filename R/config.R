@@ -218,7 +218,7 @@ mics_lab <- list(
   supervisor = "supervis|chef d.?equipe|chef d.?quipe|team leader|jefe|chefe|controleu",
   birth = "birth|naissance|nacimiento|nascimento",
   completed = "^complet|rempli|achev|conclu|termin",
-  line = "line number|^line|numero de (la )?ligne|numero de linea|numero da linha|^net number|^numero du moustiquaire|^name$|'s name|^nom$|^nombre$"
+  line = "line number|^line|numero de (la )?ligne|numero de linea|numero da linha|^net number|^numero du moustiquaire|^name$|'s name|^name of|^nom$|^nom (de|du|d.) |^nombre$"
 )
 
 # standard MICS questionnaire panels and their usual variable names (MICS5-7)
@@ -291,6 +291,23 @@ var_attr1 <- function(v, which = "label", alt = NULL) {
 }
 
 
+# Administrative variables of a questionnaire's initial module, not asked to the respondent: identifiers,
+# interviewer/supervisor codes, interview date and times, geography, CAPI selections and checks, notes.
+# Consent, result of interview, language, translator, privacy and phone-survey consent stay in the analysis.
+panel_admin_vars <- function(q, vars, lab) {
+  P <- q$panel; pv <- in_panel(vars, P)
+  i <- match(q$day, vars); dmy <- if (!is.na(i)) vars[i:min(i + 2, length(vars))] else character()
+  hm <- unlist(lapply(c(q$start_hour, q$end_hour), function(h) { j <- match(h, vars); if (is.na(j)) character() else vars[j:min(j + 1, length(vars))] }))
+  by_name <- c(paste0(P, c("1", "2", "3", "INT")), q$interviewer, q$supervisor, dmy, hm)
+  adm <- paste(mics_lab$line, mics_lab$interviewer, mics_lab$supervisor,
+               "cluster|grappe|conglomerado|household number|numero (du |de )?menage|numero de hogar|numero do domicilio",
+               "selected|selection|seleccion|rank|rang |roster|^note|location|localisation|region|district|province|zone|milieu|strat|^area|^zona",
+               "day of|month of|year of|jour d|mois d|annee d|dia d|mes d|ano d|minute|hour|heure|hora", sep = "|")
+  adm <- paste(adm, "^(number|numbers) of|^nombre |^cantidad de|^numero de|^total |weight|poids|ponderacion|peso|^fin$|^end$|^final$", sep = "|")
+  derived <- setdiff(vars[startsWith(vars, P)], pv)                # HHSEX, HHWEIGHT, HHAGE ... (not P + digit): derived, not asked
+  unique(c(intersect(by_name, pv), pv[grepl(adm, ascii_fold(lab[pv]))], pv[grepl("[$]", pv)], derived))
+}
+
 #' Build a configuration automatically from a folder of MICS datasets
 #'
 #' Language-agnostic: detection relies first on MICS variable-name structure
@@ -352,11 +369,17 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
       }
       if (!drop) keep <- c(keep, md)
     }
-    if (!length(keep)) next
     vars <- meta[[nm]]$vars; lab <- meta[[nm]]$lab
+    pan_ign <- character()
+    if (!is.null(qinfo[[nm]])) {                     # the questionnaire's own initial module (consent, result, language...)
+      P <- qinfo[[nm]]$panel
+      if (length(in_panel(vars, P))) { keep <- c(paste0(P, "*"), keep); pan_ign <- panel_admin_vars(qinfo[[nm]], vars, lab) }
+    }
+    if (!length(keep)) next
     ds[[nm]]$flag_modules <- keep
     inmod <- expand_varlist(keep, vars)
-    ign <- inmod[grepl(mics_lab$line, ascii_fold(lab[inmod])) | grepl("LN$|_(FIRST|LAST)$", inmod)]
+    adm_any <- paste(mics_lab$line, mics_lab$interviewer, mics_lab$supervisor, "cluster number|household number|numero de grappe|numero (du |de )?menage", sep = "|")
+    ign <- union(pan_ign, inmod[grepl(adm_any, ascii_fold(lab[inmod])) | grepl("LN$|_(FIRST|LAST)$", inmod)])   # IDs and staff codes inside any module (e.g. WQ4)
     if (length(ign)) ds[[nm]]$flag_ignore <- ign
     units <- inmod[grepl("U$", inmod)]
     units <- units[vapply(units, function(u) { i <- match(u, vars); i < length(vars) && vars[i + 1] == sub("U$", "N", u) }, logical(1))]
@@ -377,6 +400,15 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
     extras$ant <- list(dataset = a, height = "AN11", flags = fl)
   }
   teams <- derive_team_ranges(data_dir, ds, meta, qinfo)
+  dates_of <- function(nm) {
+    d <- ds[[nm]]; v <- meta[[nm]]$vars; i <- match(d$day, v)
+    if (is.na(i) || i + 2 > length(v)) return(NULL)
+    x <- tryCatch(read_any_cols(file.path(data_dir, meta[[nm]]$file), v[i:(i + 2)]), error = function(e) NULL)
+    if (is.null(x)) return(NULL)
+    dd <- as.Date(sprintf("%04d-%02d-%02d", as.integer(x[[3]]), as.integer(x[[2]]), as.integer(x[[1]])), optional = TRUE)
+    if (!any(!is.na(dd))) NULL else list(first = format(min(dd, na.rm = TRUE)), last = format(max(dd, na.rm = TRUE)), interviews = sum(!is.na(dd)))
+  }
+  by_q <- Filter(Negate(is.null), lapply(stats::setNames(names(qinfo), names(qinfo)), dates_of))
   st <- NULL; fw <- NULL
   if (!is.null(hhq)) {
     d <- ds[[hhq]]; v <- meta[[hhq]]$vars; i <- match(d$day, v)
@@ -386,7 +418,7 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
       first <- min(dd, na.rm = TRUE); last <- max(dd, na.rm = TRUE)
       st <- format(max(first, last - 20))                       # default: the last 21 days of fieldwork
       fw <- list(first = format(first), last = format(last), days = as.integer(last - first) + 1L,
-                 interviews = sum(!is.na(dd)), source = meta[[hhq]]$file)
+                 interviews = sum(!is.na(dd)), source = meta[[hhq]]$file, by_questionnaire = by_q)
     }
   }
   cfg <- list(
@@ -434,4 +466,40 @@ derive_team_ranges <- function(data_dir, ds, meta, qinfo) {
   modal <- p[, .N, by = .(interv, sup)][order(-N)][, .SD[1], by = interv]
   r <- modal[, .(lo = min(interv), hi = max(interv)), by = sup][order(lo)]
   list(ranges = sprintf("%d-%d", as.integer(r$lo), as.integer(r$hi)), supervisor = as.character(r$sup))
+}
+
+
+#' Check of the flag settings, variable by variable
+#'
+#' Lists, for every dataset and module to test, each variable with its label and whether it will be tested,
+#' ignored, or combined with its unit; also reports modules that match no variable and "variables to ignore"
+#' that do not exist. Use it, as in the Stata application, to review the settings before running.
+#' @param cfg configuration
+#' @param meta named list of dataset metadata with \code{varlab} (named character: label by variable), as
+#'   returned in \code{ipm_load(cfg, n_max = 400)$meta}
+#' @return list(variables = data.table, modules = data.table, problems = character)
+#' @export
+ipm_flag_check <- function(cfg, meta) {
+  cfg <- normalise_config(cfg)
+  rows <- list(); probs <- character()
+  for (nm in names(cfg$datasets)) {
+    d <- cfg$datasets[[nm]]; m <- meta[[nm]]; if (is.null(m) || !length(d$flag_modules)) next
+    vars <- names(m$varlab)
+    ign <- expand_varlist(d$flag_ignore, vars)
+    miss <- setdiff(unlist(strsplit(paste(d$flag_ignore, collapse = " "), "[[:space:]]+")), c(vars, ""))
+    miss <- miss[!grepl("[*?-]", miss)]
+    if (length(miss)) probs <- c(probs, sprintf("%s: variables to ignore not found: %s", nm, paste(miss, collapse = ", ")))
+    units <- d$flag_units; partners <- vapply(units, function(u) { i <- match(u, vars); if (is.na(i) || i == length(vars)) "" else vars[i + 1] }, "")
+    for (md in d$flag_modules) {
+      mv <- expand_varlist(md, vars)
+      if (!length(mv)) { probs <- c(probs, sprintf("%s: module %s matches no variable", nm, md)); next }
+      txt <- if (!is.null(m$fmt)) { f <- m$fmt[mv]; !is.na(f) & grepl("^A", f) & suppressWarnings(as.integer(sub("^A", "", f))) > 1 } else rep(FALSE, length(mv))
+      st <- ifelse(mv %in% ign, "ignored", ifelse(txt, "text - not tested", ifelse(mv %in% c(units, partners), "unit + number (tested together)", "tested")))
+      rows[[length(rows) + 1]] <- data.table(dataset = nm, module = sub("[*]$", "", md), variable = mv, label = unname(m$varlab[mv]), status = st)
+    }
+  }
+  v <- if (length(rows)) rbindlist(rows) else data.table(dataset = character(), module = character(), variable = character(), label = character(), status = character())
+  mods <- v[, .(variables = .N, tested = sum(!status %in% c("ignored", "text - not tested")), ignored = sum(status == "ignored"),
+                ignored_list = paste(variable[status == "ignored"], collapse = " ")), by = .(dataset, module)]
+  list(variables = v, modules = mods, problems = probs)
 }

@@ -59,7 +59,10 @@ sweep_stale <- function() {
   wipe(old)
 }
 idle_js <- sprintf("
-  (function(){ var t; function reset(){ clearTimeout(t); t = setTimeout(function(){ Shiny.setInputValue('idle_timeout', Date.now()); }, %d); }
+  (function(){ var t; function reset(){ clearTimeout(t); t = setTimeout(function(){
+      if (document.documentElement.classList.contains('shiny-busy')) { reset(); return; }   // a run, report build or AI call in progress is not inactivity
+      Shiny.setInputValue('idle_timeout', Date.now()); }, %d); }
+    $(document).on('shiny:idle', reset);
     ['mousemove','keydown','click','scroll','touchstart'].forEach(function(e){ document.addEventListener(e, reset, true); });
     $(document).on('shiny:connected', reset); })();", as.integer(round(IDLE_MINUTES * 60 * 1000)))
 
@@ -94,6 +97,7 @@ ipm_ui <- page_navbar(
     .chatq {font-weight:bold; color:#374EA2; margin-top:12px}
     .chata {border-left:3px solid #1CABE2; padding:4px 12px; margin:4px 0 10px 0; font-size:0.93em}
     h5.sch {color:#1CABE2; font-weight:bold; margin-top:22px}
+    [id^=fi_] + .selectize-control .selectize-input {max-height:120px; overflow-y:auto}
     pre.json {max-height:60vh; overflow:auto; font-size:0.75em; background:#f6f6f6}"))),
 
   # ---------------- 1. DATA ----------------
@@ -156,8 +160,12 @@ ipm_ui <- page_navbar(
   # ---------------- 5. FLAGS ----------------
   nav_panel("5. Flag settings", value = "flags",
     explain("Defines which questions enter the flag analysis. Modules follow the MICS naming (HC* = all variables starting with HC). Identification variables (line numbers, IDs) are ignored. 'Unit' variables (e.g. PN3U days/weeks) are combined with the number that follows (PN3N) before testing.",
-            "Normally nothing. Remove modules you do not want to test, or add variables to ignore (e.g. HL1-HL2 HL8-HL10). The advanced parameters reproduce the original IPM defaults; change them only if you know why."),
+            "Review the modules and the variables to ignore, then click 'Check flag settings' and go through the list: ideally every module is tested, and every variable that is not a direct question to the respondent or a direct observation is ignored. This takes time the first time (save the settings to reuse them). The advanced parameters reproduce the original IPM defaults; change them only if you know why."),
     uiOutput("flag_ui"),
+    div(style = "border:1px solid #e3e3e3; padding:10px 16px; margin:12px 0", tags$h5(class = "sch", style = "margin-top:4px", "Check the flag settings"),
+      p(class = "small-note", "Lists every variable of the modules to test with its label and status (tested or ignored), as the check in the Stata application. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored: they change the % of tests flagged. Review it the first time you set up a survey; the settings can then be saved and reused."),
+      div(actionButton("fc_run", "Check flag settings", class = "btn-primary"), downloadButton("fc_dl", "Download the full list (CSV)", class = "btn-sm")),
+      uiOutput("fc_problems"), DT::DTOutput("fc_modules"), DT::DTOutput("fc_vars")),
     card(card_header("Advanced parameters"),
       layout_columns(col_widths = c(2, 2, 2, 2, 2, 2),
         numericInput("o_levelsig", "Significance level", 0.001, 0, 1, 0.0005),
@@ -272,7 +280,7 @@ ipm_server <- function(input, output, session) {
   sdir <- file.path(tempdir(), paste0("ipm_", session$token)); dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
   upload_dirs <- character()                       # Shiny's own temporary copies of uploaded files
   rv <- reactiveValues(cfg = NULL, light = NULL, res = NULL, log = character(), report = NULL, zip = NULL, n_files = 0,
-                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL)
+                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character())
   cleanup <- function() {
     wipe(c(sdir, upload_dirs))
     isolate({ rv$cfg <- NULL; rv$light <- NULL; rv$res <- NULL; rv$report <- NULL; rv$zip <- NULL
@@ -358,11 +366,15 @@ ipm_server <- function(input, output, session) {
   })
 
   output$found_ui <- renderUI({
-    cfg <- rv$cfg
+    cfg <- cur_cfg()
     if (is.null(cfg)) return(p(class = "small-note", "No data loaded yet."))
     q <- names(cfg$datasets)[vapply(cfg$datasets, function(d) !is.null(d$result), logical(1))]
     div(div(class = "bignum", sprintf("%d files, %d questionnaires, %d teams", length(cfg$datasets), length(q), length(cfg$teams$ranges %||% character()))),
         if (!is.null(cfg$fieldwork)) p(tags$b(fw_text(cfg$fieldwork))),
+        if (length(cfg$fieldwork$by_questionnaire) > 1) tags$table(class = "table table-sm", style = "width:auto; font-size:0.85em",
+          tags$tr(tags$th("Questionnaire"), tags$th("First interview"), tags$th("Last interview"), tags$th("Records")),
+          lapply(names(cfg$fieldwork$by_questionnaire), function(q) { z <- cfg$fieldwork$by_questionnaire[[q]]
+            tags$tr(tags$td(q), tags$td(fmt_d(z$first)), tags$td(fmt_d(z$last)), tags$td(format(z$interviews, big.mark = ","))) })),
         p(sprintf("Period of analysis proposed: from %s, %s days (%s; change it on the next page). Outputs available: %d of 9.",
                   if (is.null(cfg$period$start)) "-" else fmt_d(cfg$period$start), cfg$period$days,
                   if (!is.null(cfg$fieldwork) && cfg$fieldwork$days <= 21) "the whole fieldwork so far" else "the last 3 weeks of fieldwork",
@@ -390,11 +402,13 @@ ipm_server <- function(input, output, session) {
     div(class = "small-note", style = "margin-bottom:10px", div(fw_text(fw)), div(msg))
   })
 
+  cur_cfg <- reactive({ req(rv$cfg); tryCatch(collect_cfg(), error = function(e) rv$cfg) })   # settings as currently edited
   output$found_tbl <- renderTable({
-    cfg <- rv$cfg; req(cfg)
+    cfg <- cur_cfg(); req(cfg)
     rbindlist(lapply(names(cfg$datasets), function(n) { d <- cfg$datasets[[n]]
       data.table(file = d$file, type = if (!is.null(d$result)) "questionnaire" else if (!is.null(d$parent)) paste("linked to", d$parent) else "not used",
-                 interviewer = d$interviewer %||% "(from parent)", result = d$result %||% "", date = d$day %||% "(from parent)",
+                 interviewer = d$interviewer %||% (if (!is.null(d$parent)) sprintf("from %s: %s", d$parent, cfg$datasets[[d$parent]]$interviewer %||% "?") else ""),
+                 result = d$result %||% "", date = d$day %||% (if (!is.null(d$parent)) sprintf("from %s: %s", d$parent, cfg$datasets[[d$parent]]$day %||% "?") else ""),
                  `modules to test` = paste(head(d$flag_modules, 8), collapse = " "))
     }))
   })
@@ -408,9 +422,25 @@ ipm_server <- function(input, output, session) {
         column(1, div(class = "dsname", nm), checkboxInput(paste0("inc_", nm), "include", TRUE)),
         lapply(names(ds_fields), function(f) column(if (f %in% c("start_hour", "end_hour")) 1 else 2, sel(paste0("ds_", nm, "_", f), ds_fields[[f]], ch, d[[f]]))),
         column(1, selectInput(paste0("ds_", nm, "_parent"), "Parent", c("(none)" = "", setdiff(names(cfg$datasets), nm)), d$parent %||% "")),
-        column(1, sel(paste0("ds_", nm, "_keys"), "Link keys", ch[-1], d$keys, multiple = TRUE))))
+        column(1, sel(paste0("ds_", nm, "_keys"), "Link keys", ch[-1], d$keys, multiple = TRUE))),
+        uiOutput(paste0("inh_", nm)))
     }))
   })
+  observeEvent(rv$cfg, { for (nm in names(rv$cfg$datasets)) local({ n <- nm
+    output[[paste0("inh_", n)]] <- renderUI({
+      par <- input[[paste0("ds_", n, "_parent")]] %||% ""; if (!nzchar(par)) return(NULL)
+      keys <- input[[paste0("ds_", n, "_keys")]]
+      pint <- input[[paste0("ds_", par, "_interviewer")]] %||% rv$cfg$datasets[[par]]$interviewer %||% "?"
+      pday <- input[[paste0("ds_", par, "_day")]] %||% rv$cfg$datasets[[par]]$day %||% "?"
+      own_i <- input[[paste0("ds_", n, "_interviewer")]] %||% ""; own_d <- input[[paste0("ds_", n, "_day")]] %||% ""
+      mdy <- if (!identical(pday, "?") && !is.null(rv$light$meta[[par]])) { v <- names(rv$light$meta[[par]]$varlab); i <- match(pday, v); if (!is.na(i)) paste(v[i:min(i + 2, length(v))], collapse = "/") else pday } else pday
+      div(class = "small-note", style = "margin:-4px 0 6px 9%; color:#374EA2",
+        sprintf("Linked to %s through %s. Interviewer: %s. Date of interview: %s.", par,
+                if (length(keys)) paste(keys, collapse = " + ") else "(no keys chosen - choose the link keys)",
+                if (nzchar(own_i)) sprintf("%s (own variable)", own_i) else sprintf("taken from %s (%s)", par, pint),
+                if (nzchar(own_d)) sprintf("%s (own variable)", own_d) else sprintf("taken from %s (%s)", par, mdy)),
+        " Leave Interviewer and Day empty to take them from the parent.")
+    }) }) })
   outputOptions(output, "ds_ui", suspendWhenHidden = FALSE)
 
   output$team_var_ui <- renderUI({
@@ -448,6 +478,20 @@ ipm_server <- function(input, output, session) {
     }, ignoreInit = TRUE)
   })
 
+  fc <- eventReactive(input$fc_run, { req(rv$light); ipm_flag_check(collect_cfg(), rv$light$meta) })
+  output$fc_problems <- renderUI({ x <- fc(); if (!length(x$problems)) return(p(class = "small-note", style = "color:#00833D", "No module without variables and no unknown variable to ignore."))
+    div(class = "aiwarn", tags$ul(lapply(x$problems, tags$li))) })
+  output$fc_modules <- DT::renderDT({ x <- fc()
+    DT::datatable(x$modules[, .(Dataset = dataset, Module = module, Variables = variables, Tested = tested, Ignored = ignored, `Ignored variables` = ignored_list)],
+                  rownames = FALSE, selection = "single", filter = "top", fillContainer = FALSE, options = list(pageLength = 10, scrollX = TRUE),
+                  caption = "Click a module to see its variables") })
+  output$fc_vars <- DT::renderDT({ x <- fc(); i <- input$fc_modules_rows_selected; req(length(i)); m <- x$modules[i]
+    DT::datatable(x$variables[dataset == m$dataset & module == m$module, .(Variable = variable, Label = label, Status = status)], rownames = FALSE,
+                  fillContainer = FALSE, options = list(pageLength = 50, dom = "tp"), caption = sprintf("%s, module %s", m$dataset, m$module)) |>
+      DT::formatStyle("Status", color = DT::styleEqual("ignored", "#999999")) })
+  output$fc_dl <- downloadHandler(filename = function() "ipm_flag_settings_check.csv", content = function(f) {
+    req(rv$light); data.table::fwrite(ipm_flag_check(collect_cfg(), rv$light$meta)$variables, f) })
+
   output$flag_ui <- renderUI({
     cfg <- rv$cfg; req(cfg, rv$light); meta <- rv$light$meta
     tagList(lapply(names(cfg$datasets), function(nm) {
@@ -455,7 +499,9 @@ ipm_server <- function(input, output, session) {
       div(class = "dsrow", fluidRow(
         column(1, div(class = "dsname", nm)),
         column(5, textInput(paste0("fm_", nm), "Modules to test", paste(d$flag_modules, collapse = " "), width = "100%")),
-        column(4, textInput(paste0("fi_", nm), "Variables to ignore", paste(d$flag_ignore, collapse = " "), width = "100%")),
+        column(4, selectizeInput(paste0("fi_", nm), "Variables to ignore", choices = unique(c(var_choices(meta, nm)[-1], stats::setNames(d$flag_ignore, d$flag_ignore))),
+                                 selected = d$flag_ignore, multiple = TRUE, width = "100%",
+                                 options = list(create = TRUE, plugins = list("remove_button"), placeholder = "pick variables, or type a name / range (HL1-HL10)"))),
         column(2, sel(paste0("fu_", nm), "Unit variables", var_choices(meta, nm)[-1], d$flag_units, multiple = TRUE))))
     }))
   })
@@ -476,7 +522,7 @@ ipm_server <- function(input, output, session) {
       for (f in c(names(ds_fields), "parent")) d[[f]] <- nz(g(paste0("ds_", nm, "_", f), d[[f]]))
       d$keys <- g(paste0("ds_", nm, "_keys"), d$keys) %||% character()
       d$flag_modules <- split_ws(g(paste0("fm_", nm), paste(d$flag_modules, collapse = " ")))
-      d$flag_ignore <- split_ws(g(paste0("fi_", nm), paste(d$flag_ignore, collapse = " ")))
+      d$flag_ignore <- split_ws(paste(g(paste0("fi_", nm), d$flag_ignore), collapse = " "))
       d$flag_units <- g(paste0("fu_", nm), d$flag_units) %||% character()
       ds[[nm]] <- d
     }
@@ -592,20 +638,23 @@ ipm_server <- function(input, output, session) {
   ai_st <- reactive({
     c0 <- conn(); if (is.null(c0)) return(ipm_ai_settings("none"))
     m <- input$ai_model %||% ""
+    if (nzchar(m) && identical(m, rv$stale_model) && !m %in% c(c0$model, rv$listed)) m <- ""   # a model name left from the previous connection is never used
     ipm_ai_settings(c0$provider, if (nzchar(m)) m else c0$model, c0$api_key, c0$base_url, c0$label)
   })
   list_models <- function(quiet = FALSE) {
     c0 <- conn(); if (is.null(c0)) return(invisible())
     ms <- tryCatch(ipm_ai_models(c0), error = function(e) { if (!quiet) showNotification(conditionMessage(e), type = "error", duration = 10); NULL })
     if (length(ms)) {
+      rv$listed <- ms
       cur <- isolate(input$ai_model) %||% c0$model
+      if (identical(cur, rv$stale_model) && !cur %in% c(ms, c0$model)) cur <- ""
       sel <- if (nzchar(cur %||% "") && cur %in% ms) cur else if (nzchar(c0$model) && c0$model %in% ms) c0$model else ms[1]
       updateSelectizeInput(session, "ai_model", choices = unique(c(ms, cur[nzchar(cur %||% "")])), selected = sel)
       if (!quiet) showNotification(sprintf("%d model(s) available.", length(ms)), type = "message")
     } else if (!quiet && !is.null(ms)) showNotification("The endpoint returned no model. On Ollama: ollama pull <model>.", type = "warning")
   }
   observeEvent(conn(), {
-    c0 <- conn(); rv$ai_test <- NULL
+    c0 <- conn(); rv$ai_test <- NULL; rv$stale_model <- isolate(input$ai_model); rv$listed <- character()
     updateSelectizeInput(session, "ai_model", choices = if (nzchar(c0$model)) c0$model else character(), selected = c0$model)
     if (c0$provider %in% c("ollama", "openai")) list_models(quiet = TRUE)        # local endpoints: list the installed models straight away
   })
@@ -803,7 +852,7 @@ ipm_server <- function(input, output, session) {
     on.exit({ new <- setdiff(list.files(tempdir(), full.names = TRUE), before); wipe(new[!grepl("^ipm_", basename(new))]) }, add = TRUE)
     unlink(res$cfg$results_dir, recursive = TRUE)
     withProgress(message = "Building the report", value = 0, {
-      prog <- function(m) incProgress(1 / 15, detail = m)
+      prog <- function(m) if (grepl("^Writing (flag tables|report: flag graphs)", m)) setProgress(detail = m) else incProgress(1 / 15, detail = m)
       rv$report <- tryCatch(ipm_report(res, res$cfg$results_dir, progress = prog), error = function(e) { showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
       if (!is.null(rv$report)) {
         z <- file.path(sdir, "IPM_results.zip"); unlink(z)

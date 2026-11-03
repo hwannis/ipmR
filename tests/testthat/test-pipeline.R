@@ -96,3 +96,26 @@ test_that("auto-config reports the fieldwork dates and proposes the last 21 days
   expect_equal(fw$days, as.integer(as.Date(fw$last) - as.Date(fw$first)) + 1L)
   expect_identical(cfg$period$start, format(max(as.Date(fw$first), as.Date(fw$last) - 20)))
 })
+
+test_that("the initial module of a questionnaire is tested, without its administrative variables", {
+  dir <- make_synth(); cfg <- mics7_autoconfig(dir, "Synthetic")
+  hh <- cfg$datasets$hh
+  expect_identical(hh$flag_modules[1], "HH*")
+  expect_true(all(c("HH1", "HH2", "HH3", "HH4", "HH5D", "HH5M", "HH5Y", "HH11H", "HH11M", "HH13H", "HH13M") %in% hh$flag_ignore))
+  expect_false("HH46" %in% hh$flag_ignore)                                  # result of interview stays in
+  L <- ipm_load(cfg, quiet = TRUE, n_max = 400)
+  fc <- ipm_flag_check(cfg, L$meta)
+  v <- fc$variables[dataset == "hh" & module == "HH"]
+  expect_identical(v[variable == "HH46", status], "tested")
+  expect_identical(v[variable == "HH3", status], "ignored")
+  expect_true(all(c("variables", "tested", "ignored") %in% names(fc$modules)))
+  cfg$datasets$hh$flag_modules <- c(cfg$datasets$hh$flag_modules, "ZZ*"); cfg$datasets$hh$flag_ignore <- c(cfg$datasets$hh$flag_ignore, "NOTAVAR")
+  pr <- ipm_flag_check(cfg, L$meta)$problems
+  expect_true(any(grepl("ZZ\\* matches no variable", pr))); expect_true(any(grepl("NOTAVAR", pr)))
+})
+
+test_that("auto-config reports interview dates per questionnaire", {
+  cfg <- mics7_autoconfig(make_synth(), "Synthetic")
+  expect_true("hh" %in% names(cfg$fieldwork$by_questionnaire))
+  expect_identical(cfg$fieldwork$by_questionnaire$hh$last, cfg$fieldwork$last)
+})
