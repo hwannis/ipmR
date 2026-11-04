@@ -130,16 +130,19 @@ ipm_ai_test <- function(st) {
 #' @param sc result of ipm_scorecard()
 #' @param max_teams maximum number of teams detailed (highest priority first)
 #' @param team optional team label: adds that team's flag tables (answer counts per interviewer) for questions about it
+#' @param compact smaller evidence for local models (about a third of the size): High/Medium priority teams only,
+#'   3 readings per team, fewer interviewers, modules and survey-wide signals
 #' @export
-ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team = NULL) {
+ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team = NULL, compact = FALSE) {
   r1 <- function(x) round(x, 1)
   s <- sc$survey
-  tms <- head(sc$teams, max_teams)
+  ask_team <- team %||% ""
+  tms <- head(if (compact) sc$teams[priority %in% c("High", "Medium") | team_label %in% ask_team] else sc$teams, max_teams)
   sig <- sc$signals
   fa <- res$outputs$flaganal
   readings <- if (!is.null(fa$tests) && nrow(fa$tests)) {
     f <- fa$tests[flag == 1 & !is.na(pattern)]; f[, team_label := sc$teams$team_label[match(team, sc$teams$team)]]
-    f[order(p)][, head(.SD, 8), by = team]
+    f[order(p)][, head(.SD, if (compact) 3L else 8L), by = team]
   } else NULL
   teams <- lapply(seq_len(nrow(tms)), function(i) {
     h <- tms[i]; ts <- sig[team == h$team]
@@ -156,29 +159,33 @@ ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team =
                                                       interviewer = fmt_int(rr$interv[j]), reading = rr$pattern[j]))
          })
   })
-  ivs <- if (!is.null(sc$interviewers)) head(sc$interviewers[signals > 0 | ratio >= 2], 60) else NULL
+  ivs <- if (!is.null(sc$interviewers)) { iv <- if (compact) sc$interviewers[signals > 0 & team %in% tms$team] else sc$interviewers[signals > 0 | ratio >= 2]
+    head(iv, if (compact) 25 else 60) } else NULL
   ev <- list(
     survey = list(name = s$name, period_of_analysis = s$period, records = s$records, datasets = s$datasets, teams = s$teams,
-                  flag_tests = s$tests, flags = s$flags, pct_flagged = r1(s$flag_rate %||% NA), chance_level_pct = s$levelsig * 100,
-                  ratio_to_chance = r1(s$ratio_to_chance %||% NA), descriptive_signals_cover_last_weeks = s$recent_weeks),
-    method = c("Flag analysis: for each question and interviewer, answers are compared with the rest of the same team (chi-square or t-test); flag = p < 0.001, so about 0.1% of tests are flagged by chance alone.",
+                  flag_tests = s$tests, flags = s$flags, pct_flagged = r1(s$flag_rate %||% NA), nominal_flag_level_pct = s$levelsig * 100,
+                  descriptive_signals_cover_last_weeks = s$recent_weeks,
+                  records_per_household = if (!is.null(fa$clustering)) as.list(stats::setNames(round(fa$clustering$per_household, 1), fa$clustering$dataset))),
+    method = c("Flag analysis: for each question and interviewer, answers are compared with the rest of the same team (chi-square or t-test); flag = p < 0.001, so about 0.1% of tests would be flagged by chance alone (nominal level). Records of the same household or cluster are alike and flags are not independent of each other, so do not describe the flag rate as 'x times chance'; use it to compare teams, modules and interviewers.",
                "A flag is a statistical signal, not proof: it may reflect a misunderstood or misread question, misuse of answer categories, skipped questions, leading respondents, or genuinely different respondents.",
                "Questions flagged in many teams usually point to a question, translation or training problem rather than to interviewers.",
+               "Files with several records per household (records_per_household above 1.5: household members, nets, births) flag more easily, because records of the same household are not independent; do not compare their flag rates directly with those of the questionnaire files.",
                "priority_rule_based and warning_points come from a transparent rule set (high-severity signal = 3 points, medium = 1); you may adjust priorities if the evidence justifies it."),
     teams = teams,
     interviewers = if (!is.null(ivs) && nrow(ivs)) lapply(seq_len(nrow(ivs)), function(i) list(team = ivs$team_label[i], interviewer = fmt_int(ivs$interv[i]),
       flag_tests = ivs$tests[i], flags = ivs$flags[i], pct_flagged = r1(ivs$rate[i]), ratio_to_survey_rate = r1(ivs$ratio[i]),
       signal_types = if (is.na(ivs$signal_types[i])) NULL else ivs$signal_types[i])),
-    modules = if (!is.null(sc$modules)) { m <- head(sc$modules[tests >= 30], 25)
+    modules = if (!is.null(sc$modules)) { m <- head(sc$modules[tests >= 30], if (compact) 10 else 25)
       lapply(seq_len(nrow(m)), function(i) list(module = paste(m$dataset[i], m$module[i]), flag_tests = m$tests[i], pct_flagged = r1(m$rate[i]),
                                                 ratio_to_survey_rate = r1(m$ratio[i]), teams_flagged = m$teams_flagged[i], teams = m$teams[i], scope = m$scope[i])) },
-    survey_wide_signals = { w <- sig[level == "survey"]; lapply(seq_len(min(nrow(w), 30)), function(i) list(type = w$type[i], severity = w$severity[i], evidence = w$evidence[i])) },
+    survey_wide_signals = { w <- sig[level == "survey"]; lapply(seq_len(min(nrow(w), if (compact) 12 else 30)), function(i) list(type = w$type[i], severity = w$severity[i], evidence = w$evidence[i])) },
     standard_actions = lapply(ipm_action_library(), function(a) a[c("action", "owner", "timing")])
   )
+  if (compact) ev$note <- "Compact evidence: only the High and Medium priority teams are detailed; other teams are Low priority."
   if (!is.null(team) && !is.null(fa$tables)) {
     tn <- sc$teams$team[match(team, sc$teams$team_label)]
     tb <- Filter(function(z) identical(as.integer(z$team), as.integer(tn)), fa$tables)
-    ev$team_flag_tables <- lapply(head(tb, 25), function(z) list(question = paste(z$dataset, z$variable), label = unname(z$desc), flagged_interviewer = fmt_int(z$interv),
+    ev$team_flag_tables <- lapply(head(tb, if (compact) 10 else 25), function(z) list(question = paste(z$dataset, z$variable), label = unname(z$desc), flagged_interviewer = fmt_int(z$interv),
                                                                  p = signif(z$p, 2), reading = z$pattern,
                                                                  answer_counts = utils::capture.output(print(z$table, row.names = FALSE))))
   }
@@ -231,18 +238,36 @@ ai_system_prompt <- function(language = "English") paste(
 
 # ---------------------------------------------------------------- prompts (one place, used for the calls and the preview)
 
-ai_plan_prompt <- function(res, sc, language = "English", max_teams = 30) {
-  evj <- ai_json(ipm_ai_evidence(res, sc, max_teams = max_teams))
+ai_plan_prompt <- function(res, sc, language = "English", max_teams = 30, compact = FALSE) {
+  evj <- ai_json(ipm_ai_evidence(res, sc, max_teams = max_teams, compact = compact))
   user <- paste0("Evidence (JSON):\n", evj, "\n\nWrite the action plan. Include every team whose rule-based priority is High or Medium, and any other team you consider needs action; ",
                  "list survey-wide question/module problems separately. Use at most 6 issues and 5 actions per team.")
   list(system = ai_system_prompt(language), user = user, schema = ipm_plan_schema(), max_tokens = 16000, evidence_json = evj)
 }
 
-ai_ask_prompt <- function(question, res, sc, history = list(), language = "English") {
-  labs <- sc$teams$team_label
-  hit <- labs[vapply(labs, function(l) grepl(paste0("(^|[^A-Za-z0-9])", l, "([^0-9]|$)"), question, ignore.case = TRUE) ||
-                                      grepl(paste0("team\\s*", sub("^\\D*", "", l), "([^0-9]|$)"), question, ignore.case = TRUE), logical(1))]
-  ev <- ipm_ai_evidence(res, sc, team = if (length(hit)) hit[1] else NULL)
+# Team labels are "T4" or "T4 (104)" (104 = supervisor / team leader code): parts used to recognise a team
+team_label_parts <- function(labs) {
+  short <- sub(" .*", "", labs)
+  list(short = short, num = sub("^T", "", short), code = ifelse(grepl("\\(", labs), sub("^[^(]*\\(([^)]*)\\).*$", "\\1", labs), NA_character_))
+}
+# The canonical team label for what a model or a user wrote ("T4", "T4 (104)", "team 4", "104")
+canon_team <- function(x, labs) {
+  x <- trimws(as.character(x %||% "")); if (x %in% labs) return(x)
+  pt <- team_label_parts(labs)
+  i <- match(toupper(sub(" .*", "", x)), toupper(pt$short)); if (!is.na(i)) return(labs[i])
+  n <- sub("^(team|equipe|\u00e9quipe)?\\s*", "", x, ignore.case = TRUE)
+  i <- match(n, pt$num); if (!is.na(i)) return(labs[i])
+  i <- match(gsub("[()]", "", n), pt$code); if (!is.na(i)) return(labs[i])
+  x
+}
+
+ai_ask_prompt <- function(question, res, sc, history = list(), language = "English", compact = FALSE) {
+  labs <- sc$teams$team_label; pt <- team_label_parts(labs)
+  hit <- labs[vapply(seq_along(labs), function(i)
+    grepl(paste0("(^|[^A-Za-z0-9])", pt$short[i], "([^0-9]|$)"), question, ignore.case = TRUE) ||
+    grepl(paste0("team\\s*", pt$num[i], "([^0-9]|$)"), question, ignore.case = TRUE) ||
+    (!is.na(pt$code[i]) && grepl(paste0("(team|supervisor|leader|\\()\\s*", pt$code[i], "([^0-9]|$)"), question, ignore.case = TRUE)), logical(1))]
+  ev <- ipm_ai_evidence(res, sc, team = if (length(hit)) hit[1] else NULL, compact = compact)
   hist <- paste(vapply(utils::tail(history, 4), function(h) sprintf("Q: %s\nA: %s", h$q, h$a), ""), collapse = "\n\n")
   user <- paste0("Evidence (JSON):\n", ai_json(ev), if (nzchar(hist)) paste0("\n\nEarlier questions in this session:\n", hist) else "",
                  "\n\nQuestion: ", question,
@@ -260,12 +285,13 @@ ai_ask_prompt <- function(question, res, sc, history = list(), language = "Engli
 #' @param question the question (for what = "question")
 #' @param history earlier questions in the session
 #' @param language language of the answer
+#' @param compact compact evidence (see ipm_ai_evidence())
 #' @return list(url, headers, body, json, chars, tokens_estimate, parts)
 #' @export
 ipm_ai_preview <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), what = c("plan", "question"),
-                           question = "Which team should the coordinator visit first, and why?", history = list(), language = "English") {
+                           question = "Which team should the coordinator visit first, and why?", history = list(), language = "English", compact = FALSE) {
   what <- match.arg(what)
-  pr <- if (what == "plan") ai_plan_prompt(res, sc, language) else ai_ask_prompt(question, res, sc, history, language)
+  pr <- if (what == "plan") ai_plan_prompt(res, sc, language, compact = compact) else ai_ask_prompt(question, res, sc, history, language, compact = compact)
   if (!st$provider %in% c("anthropic", "ollama", "openai")) st <- ipm_ai_settings("anthropic", api_key = "x")   # show the Claude format when nothing is set up
   rq <- ai_request(st, pr$system, pr$user, pr$schema, pr$max_tokens)
   j <- ai_json(rq$body)
@@ -391,6 +417,7 @@ ipm_validate_plan <- function(plan, sc, evidence_json) {
   ivteam <- if (!is.null(sc$interviewers)) sc$interviewers[, .(team_label, code = fmt_int(interv))] else data.table(team_label = character(), code = character())
   keep <- list()
   for (t in plan$teams %||% list()) {
+    t$team <- canon_team(t$team, sc$teams$team_label)
     if (!t$team %in% sc$teams$team_label) { warn <- c(warn, sprintf("Team '%s' is not in the data: removed.", t$team)); next }
     t$unverified <- character()
     for (k in seq_along(t$interviewers_to_observe)) {
@@ -430,10 +457,11 @@ ipm_validate_plan <- function(plan, sc, evidence_json) {
 #' @param st settings from ipm_ai_settings()
 #' @param language language of the plan (e.g. "English", "French")
 #' @param max_teams maximum number of teams detailed
+#' @param compact compact evidence for local models (see ipm_ai_evidence())
 #' @export
-ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), language = "English", max_teams = 30) {
+ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), language = "English", max_teams = 30, compact = FALSE) {
   if (!isTRUE(st$ready)) { p <- ipm_plan_rules(sc); p$note <- "No AI provider configured: rule-based plan."; return(p) }
-  pr <- ai_plan_prompt(res, sc, language, max_teams); evj <- pr$evidence_json
+  pr <- ai_plan_prompt(res, sc, language, max_teams, compact = compact); evj <- pr$evidence_json
   if (st$provider == "mock") attr(st, "mock_text") <- ai_json(ipm_plan_rules(sc, max_teams))
   t0 <- Sys.time()
   out <- ipm_ai_call(st, pr$system, pr$user, schema = pr$schema, max_tokens = pr$max_tokens)
@@ -442,7 +470,7 @@ ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), la
   plan <- ipm_validate_plan(plan, sc, evj)
   plan$source <- if (st$provider == "mock") "mock" else "ai"
   plan$model <- out$model; plan$usage <- out$usage; plan$seconds <- round(as.numeric(difftime(Sys.time(), t0, units = "secs")))
-  plan$generated <- format(Sys.time(), "%Y-%m-%d %H:%M"); plan$language <- language
+  plan$generated <- format(Sys.time(), "%Y-%m-%d %H:%M"); plan$language <- language; plan$compact <- compact
   plan
 }
 
@@ -451,11 +479,12 @@ ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), la
 #' @param res,sc,st as in ipm_ai_plan()
 #' @param history list of previous list(q, a) exchanges in this session (last 4 are sent)
 #' @param language answer language
+#' @param compact compact evidence for local models (see ipm_ai_evidence())
 #' @return list(answer (markdown), usage, model, team)
 #' @export
-ipm_ai_ask <- function(question, res, sc = ipm_scorecard(res), st = ipm_ai_settings(), history = list(), language = "English") {
+ipm_ai_ask <- function(question, res, sc = ipm_scorecard(res), st = ipm_ai_settings(), history = list(), language = "English", compact = FALSE) {
   if (!isTRUE(st$ready)) stop("No AI provider is configured.", call. = FALSE)
-  pr <- ai_ask_prompt(question, res, sc, history, language); hit <- pr$team
+  pr <- ai_ask_prompt(question, res, sc, history, language, compact = compact); hit <- pr$team
   if (st$provider == "mock") attr(st, "mock_text") <- sprintf("Mock answer about %s.", if (length(hit)) hit[1] else "the survey")
   out <- ipm_ai_call(st, pr$system, pr$user, max_tokens = pr$max_tokens)
   list(answer = out$text, usage = out$usage, model = out$model, team = if (length(hit)) hit[1] else NA_character_)

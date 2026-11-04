@@ -181,9 +181,17 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
   if (!is.null(d <- recent(r$ant_heap$data))) {
     a <- d[, .(v = sum(pct_heaping * measured) / sum(measured), n = sum(measured)), by = team]
     desc$heaping <- a
+    mt <- r$ant_heap$measurers
     for (i in which(a$n >= 20 & a$v >= 30)) { h <- a[i]; ac <- la("heaping")
+      ms_txt <- ""
+      if (!is.null(mt) && nrow(m <- mt[team == h$team & measured_period >= 10][order(-pct_heaping_period)])) {
+        m <- head(m[pct_heaping_period >= 30], 3)
+        if (nrow(m)) { ms_txt <- sprintf(" Measurer(s) (%s) with most heaping in the period of analysis: %s.", r$ant_heap$measurer_var,
+                                         paste(sprintf("%s (%s of %d)", fmt_int(m$measurer), pctf(m$pct_heaping_period, 0), m$measured_period), collapse = ", "))
+                       ac$action <- sprintf("Retrain measurer(s) %s on reading the board to the last 0.1 cm (no rounding to .0/.5); repeat a standardisation exercise; supervisor checks a few of their measurements.", paste(fmt_int(m$measurer), collapse = ", ")) }
+      }
       add_sig("team", "heaping", h$team, severity = if (h$v >= 50) "high" else "medium", value = h$v, benchmark = 20,
-              evidence = sprintf("%s of heights end in .0 or .5 (%d children measured, last %d weeks); about 20%% expected.", pctf(h$v, 0), h$n, recent_weeks),
+              evidence = sprintf("%s of heights end in .0 or .5 (%d children measured, last %d weeks); about 20%% expected.%s", pctf(h$v, 0), h$n, recent_weeks, ms_txt),
               action = ac$action, owner = ac$owner, timing = ac$timing) }
   }
   if (!is.null(d <- recent(r$ant_oor$data))) {
@@ -242,8 +250,8 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
 ipm_plan_rules <- function(sc, max_teams = 50) {
   s <- sc$survey; sig <- sc$signals
   overall <- if (!is.null(s$flag_rate))
-    sprintf("%s: %s flag tests, %s flagged (%.1f times the %s expected by chance). %d of %d teams are high priority and %d medium priority. %d survey-wide question or module problems were detected.",
-            s$period, format(s$tests, big.mark = ","), pctf(s$flag_rate), s$ratio_to_chance, pctf(s$levelsig * 100),
+    sprintf("%s: %s flag tests, %s flagged (nominal level %s). %d of %d teams are high priority and %d medium priority. %d survey-wide question or module problems were detected.",
+            s$period, format(s$tests, big.mark = ","), pctf(s$flag_rate), pctf(s$levelsig * 100),
             sum(sc$teams$priority == "High"), nrow(sc$teams), sum(sc$teams$priority == "Medium"), nrow(sig[level == "survey"]))
     else "No flag analysis available; recommendations are based on the descriptive outputs only."
   sw <- sig[level == "survey"]

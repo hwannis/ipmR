@@ -37,19 +37,24 @@ ipm_summary <- function(res) {
   if (!is.null(fa) && !is.null(fa$tests) && nrow(fa$tests)) {
     t <- copy(fa$tests); t[, mod := sub("\\*$", "", module)]
     R <- mean(t$flag) * 100
-    b <- sprintf("%s tests run on %s questions; %s flagged (%s), against about %s expected by chance alone at p < %s.",
+    b <- sprintf("%s tests run on %s questions; %s flagged (%s). If interviewers differed only by chance, about %s of tests would be flagged at p < %s (nominal level).",
                  format(nrow(t), big.mark = ","), format(uniqueN(t[, .(dataset, varname)]), big.mark = ","), format(sum(t$flag), big.mark = ","),
                  pct1(R), pct1(o$levelsig * 100), fmt_int(o$levelsig))
     ratio <- R / (o$levelsig * 100)
-    b <- c(b, if (ratio >= 10) sprintf("The flag rate is about %.0f times what chance would produce: interviewer effects are substantial and need follow-up.", ratio)
-              else if (ratio >= 3) sprintf("The flag rate is about %.0f times the chance level: there are real interviewer effects to follow up.", ratio)
-              else "The flag rate is close to the chance level: little evidence of systematic interviewer effects.")
+    b <- c(b, if (ratio >= 10) "The flag rate is far above the nominal level: there are substantial differences between interviewers of the same team to follow up."
+              else if (ratio >= 3) "The flag rate is clearly above the nominal level: there are real differences between interviewers to follow up."
+              else "The flag rate is close to the nominal level: little evidence of systematic interviewer effects.",
+           "Do not read the flag rate as 'x times chance': each test treats records as independent, but records of the same household (members, births, nets) and of the same cluster are alike, so real differences between the households an interviewer visited also produce flags; and flags are not independent of each other (one interviewer, or one misunderstood question, produces many). Use the % flagged to compare teams, modules, interviewers and successive rounds, not as a measure of the size of the problem.")
     dsr <- t[, .(rate = mean(flag) * 100, tests = .N), by = dataset][order(-rate)]
     b <- c(b, paste0("By dataset: ", paste(sprintf("%s %s", dsr$dataset, pct1(dsr$rate)), collapse = "; "), "."))
     cfgd <- names(res$cfg$datasets)[vapply(res$cfg$datasets, function(d) length(d$flag_modules) > 0, logical(1))]
     none <- setdiff(cfgd, dsr$dataset)
     if (length(none)) b <- c(b, sprintf("No flag test was possible for %s: a test needs at least two interviewers in the same team with %d or more records each in the period (e.g. only one male interviewer per team for the men's questionnaire).",
                                         paste(none, collapse = ", "), o$test_min))
+    cl <- fa$clustering
+    if (!is.null(cl) && nrow(cl <- cl[per_household >= 1.5 & dataset %in% dsr$dataset]))
+      b <- c(b, sprintf("Several records per household in %s: tests count records, not households, and records of the same household (members, nets, births...) tend to have the same answers, so these files flag more easily. Check that a flag in them is not driven by a few large households (flag table), and compare their flag rates with each other rather than with the questionnaire files.",
+                        paste(sprintf("%s (%.1f records per household)", cl$dataset, cl$per_household), collapse = ", ")))
     secs$overall <- list(title = "Overall", bullets = b)
 
     # highly flagged questions (as in the Stata report): the most direct pointer to what needs attention
@@ -177,7 +182,12 @@ ipm_summary <- function(res) {
   if (!is.null(r$ant_heap)) {
     d <- recent(copy(r$ant_heap$data)); a <- d[, .(v = sum(pct_heaping * measured) / sum(measured), n = sum(measured)), by = team]
     x <- a[n >= 20 & v >= 30][order(-v)]
-    if (nrow(x)) bd <- c(bd, sprintf("Height heaping on .0/.5 above 30%% (about 20%% expected), last 3 weeks: %s - retrain measurers.", paste(sprintf("%s %.0f%%", tl(x$team), x$v), collapse = "; ")))
+    if (nrow(x)) {
+      mt <- r$ant_heap$measurers
+      mtxt <- if (!is.null(mt)) vapply(x$team, function(tm) { m <- head(mt[team == tm & measured_period >= 10 & pct_heaping_period >= 30][order(-pct_heaping_period)], 3)
+        if (nrow(m)) sprintf(" (measurer %s)", paste(sprintf("%s: %.0f%%", fmt_int(m$measurer), m$pct_heaping_period), collapse = ", ")) else "" }, "") else rep("", nrow(x))
+      bd <- c(bd, sprintf("Height heaping on .0/.5 above 30%% (about 20%% expected), last 3 weeks: %s - retrain these measurers.", paste(sprintf("%s %.0f%%%s", tl(x$team), x$v, mtxt), collapse = "; ")))
+    }
   }
   if (!is.null(r$ant_oor)) {
     d <- recent(copy(r$ant_oor$data)); a <- d[, .(v = sum(pct_oor * measured) / sum(measured), n = sum(measured)), by = team]

@@ -3,7 +3,7 @@
 # 2. Open this folder in RStudio (or setwd() to it), paste your setAccountInfo() line below, and run the script.
 
 install.packages(c("rsconnect", "shiny", "bslib", "DT", "data.table", "haven", "ggplot2", "officer",
-                   "flextable", "openxlsx", "yaml", "tidyselect", "scales", "ragg", "jsonlite", "httr2", "commonmark"))
+                   "flextable", "openxlsx", "yaml", "tidyselect", "scales", "ragg", "jsonlite", "httr2", "commonmark", "callr"))
 
 rsconnect::setAccountInfo(name = "<ACCOUNT>", token = "<TOKEN>", secret = "<SECRET>")
 

@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Kept in a separate layer: rebuilding after a code change only reinstalls ipmR (seconds).
 RUN install2.r --error --skipinstalled \
       shiny bslib DT htmltools data.table haven ggplot2 officer flextable openxlsx yaml tidyselect scales ragg \
-      jsonlite httr2 commonmark \
+      jsonlite httr2 commonmark callr \
     && rm -rf /tmp/downloaded_packages
 
 # The package itself, from the checked-out repository

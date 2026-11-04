@@ -51,4 +51,4 @@ run_ipm <- function(cfg, write = TRUE, progress = message, keep_data = TRUE) {
 #' @export
 ipm_internals <- function() list(output_names = ipm_output_names, hhm_defs = hhm_group_defs,
                                  normalise = normalise_config, read_cols = read_any_cols, assign_teams = assign_teams,
-                                 flag_doc = write_flag_doc)
+                                 flag_doc = write_flag_doc, version = IPMR_VERSION)

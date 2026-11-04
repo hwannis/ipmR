@@ -9,7 +9,8 @@ ipm_ai_plan(
   sc = ipm_scorecard(res),
   st = ipm_ai_settings(),
   language = "English",
-  max_teams = 30
+  max_teams = 30,
+  compact = FALSE
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ ipm_ai_plan(
 \item{language}{language of the plan (e.g. "English", "French")}
 
 \item{max_teams}{maximum number of teams detailed}
+
+\item{compact}{compact evidence for local models (see ipm_ai_evidence())}
 }
 \description{
 Sends the evidence pack to the configured model and returns a validated team-by-team action plan

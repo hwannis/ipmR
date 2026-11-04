@@ -35,7 +35,7 @@ remotes::install_github("hwannis/ipmR")                 # latest version on main
 remotes::install_github("hwannis/ipmR@v0.4.4")          # or a given release
 ```
 
-The app also needs `install.packages(c("shiny", "bslib", "DT", "ragg", "httr2", "commonmark"))`; the last two are only needed for the AI features.
+The app also needs `install.packages(c("shiny", "bslib", "DT", "ragg", "httr2", "commonmark", "callr"))`; httr2 and commonmark are only needed for the AI features, callr runs long tasks in the background so that they do not block other users.
 
 To install without GitHub access, download `ipmR_<version>.tar.gz` from the [Releases](https://github.com/hwannis/ipmR/releases) page, then:
 
@@ -143,7 +143,7 @@ The release asset `ipm_shinyapp.zip` (built from `inst/shinyapps/` by `deploy/sh
 6. **Run.** Runs everything. You can also save or load the settings file.
 7. **Results:**
    - **Summary & priorities:** automatic narrative covering overall flag level, most problematic modules and questions, teams to target and on which modules, interviewers to observe with examples, and other warning signs. It also shows the team × module heatmap and the flag rates by team and by interviewer.
-   - **Figures:** all graphs, each with a "How to read" note.
+   - **Figures:** all graphs, each with a "How to read" note, one at a time or all the graphs of an output on one page; SVG and high-resolution PNG downloads; on the graphs of flags by module, point at a circle to see its flag table.
    - **Flag explorer:** every flagged test with a one-line reading, for example "Interviewer 102 recorded '1. YES' for 91% of cases (31/34) vs 7% for the rest of team T1 (4/59)". Click a row to see the full crosstab.
    - **Data & questionnaires:** records, dates and interviewers per dataset.
    - **Downloads:** Word report (key findings first, then all outputs with reading notes), flag tables, anthropometry Excel listing, and CSVs.

@@ -32,11 +32,24 @@ team_groups <- function(sdt, o, facet = "interv") {
 }
 
 # generic interviewer/team x week panel graph (Stata: scatter ... by(interv, cols(12)))
+# weeks of fieldwork (woi) covered by the period of analysis in a dataset
+period_weeks <- function(p, nm) {
+  pb <- period_bounds(p$cfg); x <- p$ds[[nm]]
+  if (is.null(x) || !all(c("doi", "woi") %in% names(x))) return(NULL)
+  w <- x$woi[!is.na(x$doi) & !is.na(x$woi) & x$doi >= pb$start & x$doi <= pb$end]
+  if (!length(w)) NULL else range(w)
+}
+
 panel_pages <- function(sdt, y, n, average, o, title, subtitle_fn, caption = NULL, ylab = NULL,
-                        facet = "interv", ylim = NULL, ybreaks = ggplot2::waiver(), ylabels = ggplot2::waiver()) {
+                        facet = "interv", ylim = NULL, ybreaks = ggplot2::waiver(), ylabels = ggplot2::waiver(), shade = NULL) {
   sdt <- sdt[!is.na(team) & !is.na(woi)]
+  only <- isTRUE(o$period_weeks_only) && length(shade) == 2
+  if (only) sdt <- sdt[woi >= shade[1] & woi <= shade[2]]
+  if (!nrow(sdt)) return(list())
   groups <- team_groups(sdt, o, facet)
-  wmax <- max(sdt$woi, na.rm = TRUE)
+  wmin <- if (only) shade[1] else 1
+  wmax <- if (only) shade[2] else max(sdt$woi, na.rm = TRUE)
+  shade_txt <- if (length(shade) == 2) sprintf(if (only) "Only the weeks of the period of analysis are shown (weeks %d-%d)." else "Shaded: weeks of the period of analysis (weeks %d-%d).", shade[1], shade[2])
   lapply(groups, function(tg) {
     d <- sdt[team %in% tg]
     if (facet == "interv") {
@@ -47,16 +60,19 @@ panel_pages <- function(sdt, y, n, average, o, title, subtitle_fn, caption = NUL
     trange <- paste(range(tg), collapse = "-")
     yr <- ylim %||% range(c(0, d[[y]], average), na.rm = TRUE)
     off <- diff(yr) * 0.09
-    g <- ggplot2::ggplot(d, ggplot2::aes(x = woi, y = .data[[y]])) +
+    g <- ggplot2::ggplot(d, ggplot2::aes(x = woi, y = .data[[y]]))
+    if (length(shade) == 2 && !only) g <- g + ggplot2::annotate("rect", xmin = shade[1] - 0.5, xmax = shade[2] + 0.5, ymin = -Inf, ymax = Inf, fill = unicef_cyan, alpha = 0.13)
+    g <- g +
       ggplot2::geom_hline(yintercept = average, colour = unicef_cyan, linewidth = 0.45) +
       ggplot2::geom_point(size = 0.9, colour = "black") +
-      ggplot2::geom_text(ggplot2::aes(y = .data[[y]] - off, label = .data[[n]]), size = 1.5, colour = unicef_dark, angle = 90, hjust = 1) +
+      ggplot2::geom_text(ggplot2::aes(y = .data[[y]] - off, label = .data[[n]]), size = 1.9, colour = unicef_dark, angle = 90, hjust = 1) +
       ggplot2::facet_wrap(~panel, ncol = o$scatmaxcol, drop = TRUE) +
-      ggplot2::scale_x_continuous(breaks = function(l) unique(pmax(1, round(pretty(l, 4)))), limits = c(0.5, wmax + 0.5)) +
+      ggplot2::scale_x_continuous(breaks = function(l) unique(pmax(wmin, round(pretty(l, 4)))), limits = c(wmin - 0.5, wmax + 0.5)) +
       ggplot2::scale_y_continuous(breaks = ybreaks, labels = ylabels) +
       ggplot2::coord_cartesian(ylim = c(min(yr[1], yr[1] - off * 1.6), yr[2]), clip = "off") +
       ggplot2::labs(title = title, subtitle = subtitle_fn(trange), x = "Week of fieldwork", y = ylab,
-                    caption = paste(c(sprintf("Cyan line: overall average (%s). Numbers below dots: sample size in the week.", format(round(average, 1), nsmall = 1)), caption), collapse = "\n")) +
+                    caption = paste(c(sprintf("Cyan line: overall average (%s). Numbers below dots: sample size in the week.%s", format(round(average, 1), nsmall = 1),
+                                              if (!is.null(shade_txt)) paste0(" ", shade_txt) else ""), caption), collapse = "\n")) +
       theme_ipm()
     g
   })
@@ -113,7 +129,7 @@ out_quescrates <- function(p) {
     plots <- panel_pages(s, "value", "cnt", avg, o, "COMPLETION RATES",
       function(tr) sprintf('"%s" questionnaire; teams %s', n, tr),
       caption = sprintf("Completed interviews: %s = %s", p$cfg$datasets[[n]]$result, paste(o$interco, collapse = ",")),
-      ylab = "Completion rate (%)", ylim = c(0, 100), ybreaks = seq(0, 100, 20))
+      ylab = "Completion rate (%)", ylim = c(0, 100), ybreaks = seq(0, 100, 20), shade = period_weeks(p, n))
     list(dataset = n, plots = plots, data = s[, .(dataset = n, team, interv, woi, completion_rate = value, n = cnt)], average = avg)
   })
   list(id = "quescrates", title = "COMPLETION RATES OF EACH QUESTIONNAIRE PER INTERVIEWER AND PER WEEK OF FIELDWORK", sections = secs,
@@ -151,7 +167,7 @@ out_quesmtimes <- function(p) {
       function(tr) sprintf('"%s" questionnaire; teams %s', n, tr),
       caption = sprintf("Time begins: %s-%s; time ends: %s-%s. Durations capped at %d minutes.", d$start_hour, b$var, d$end_hour, e$var, mq),
       ylab = "Median duration (minutes)", ylim = c(0, mq), ybreaks = brk,
-      ylabels = ifelse(brk == mq, paste0(mq, "+"), brk))
+      ylabels = ifelse(brk == mq, paste0(mq, "+"), brk), shade = period_weeks(p, n))
     list(dataset = n, plots = plots, data = s[, .(dataset = n, team, interv, woi, median_minutes = value, n = cnt)], average = avg)
   })
   list(id = "quesmtimes", title = "MEDIAN TIME TO COMPLETE EACH QUESTIONNAIRE PER INTERVIEWER AND PER WEEK OF FIELDWORK", sections = secs,
@@ -159,7 +175,7 @@ out_quesmtimes <- function(p) {
 }
 
 # port of meannoindiv_graph.do
-mean_indiv <- function(x, unit, ingrp, p, title, subtitle, ylab) {
+mean_indiv <- function(x, unit, ingrp, p, title, subtitle, ylab, shade = NULL) {
   o <- p$cfg$options
   x <- copy(x); x[, inagegr := as.integer(ingrp)]
   h <- x[!is.na(woi), .(size = sum(inagegr)), by = c(unit, "team", "interv", "woi")]
@@ -168,7 +184,7 @@ mean_indiv <- function(x, unit, ingrp, p, title, subtitle, ylab) {
   s[value > 10, value := 10]
   s <- merge(s, interv_lab_map(x), by = "interv"); s <- add_labels(s, p)
   plots <- panel_pages(s, "value", "cnt", avg, o, title, function(tr) sprintf("%s; teams %s", subtitle, tr),
-                       caption = "Y axis limited to a maximum of 10 (10 stands for 10+).", ylab = ylab)
+                       caption = "Y axis limited to a maximum of 10 (10 stands for 10+).", ylab = ylab, shade = shade)
   list(plots = plots, data = s, average = avg)
 }
 
@@ -186,7 +202,7 @@ out_meannohhm <- function(p) {
     if (!is.na(gd$lo)) ing <- !is.na(age) & age >= gd$lo & age <= gd$hi
     if (!is.na(gd$sex)) ing <- ing & !is.na(sex) & sex == if (gd$sex == "f") o$hhmsexf else o$hhmsexm
     r <- mean_indiv(x, intersect(o$hhunit, names(x)), ing, p, sprintf('MEAN NO. OF HOUSEHOLD MEMBERS ("%s" dataset): %s', n, gd$label),
-                    sprintf('Members per household, %s', gd$label), sprintf("Mean (age: %s; sex: %s)", e$age, e$sex))
+                    sprintf('Members per household, %s', gd$label), sprintf("Mean (age: %s; sex: %s)", e$age, e$sex), shade = period_weeks(p, n))
     r$dataset <- n; r$group <- g; r$data <- r$data[, .(dataset = n, group = g, team, interv, woi, mean_members = value, households = cnt)]
     r
   })
@@ -201,7 +217,7 @@ out_everborn <- function(p) {
   o <- p$cfg$options; n <- p$cfg$extras$bh$dataset; x <- p$ds[[n]]
   if ("result" %in% names(x)) x <- x[result %in% o$interco]
   r <- mean_indiv(x, intersect(o$momunit, names(x)), rep(TRUE, nrow(x)), p, sprintf('MEAN NO. OF CHILDREN EVER BORN: "%s" dataset', n),
-                  "Births recorded per woman with a birth history", "Mean children ever born")
+                  "Births recorded per woman with a birth history", "Mean children ever born", shade = period_weeks(p, n))
   r$dataset <- n; r$data <- r$data[, .(dataset = n, team, interv, woi, mean_ceb = value, women = cnt)]
   list(id = "everborn", title = "MEAN NUMBER OF CHILDREN EVER BORN IN BIRTH HISTORIES PER INTERVIEWER AND PER WEEK OF FIELDWORK",
        sections = list(r), data = r$data)
@@ -223,7 +239,7 @@ out_u5deaths <- function(p) {
   s <- x[!is.na(woi), .(value = mean(u5) * 100, cnt = .N), by = .(team, interv, woi)]
   s <- merge(s, interv_lab_map(x), by = "interv"); s <- add_labels(s, p)
   plots <- panel_pages(s, "value", "cnt", avg, o, "PERCENTAGE OF UNDER-5 DEATHS", function(tr) sprintf('"%s" dataset; teams %s', n, tr),
-                       caption = sprintf("Under-5 death: %s=%s & %s<60 months%s", e$death, o$bhdeath, e$age_death, if (!is.null(e$age_death_unit)) paste0(" (converted using unit ", e$age_death_unit, ")") else ""), ylab = "Percent")
+                       caption = sprintf("Under-5 death: %s=%s & %s<60 months%s", e$death, o$bhdeath, e$age_death, if (!is.null(e$age_death_unit)) paste0(" (converted using unit ", e$age_death_unit, ")") else ""), ylab = "Percent", shade = period_weeks(p, n))
   sec <- list(dataset = n, plots = plots, average = avg, data = s[, .(dataset = n, team, interv, woi, pct_u5_deaths = value, births = cnt)])
   list(id = "u5deaths", title = "PERCENTAGE OF UNDER-5 DEATHS IN BIRTH HISTORIES PER INTERVIEWER AND PER WEEK OF FIELDWORK", sections = list(sec), data = sec$data)
 }
@@ -244,9 +260,21 @@ out_ant_heap <- function(p) {
   plots <- panel_pages(s, "value", "cnt", avg, o, "PERCENTAGE OF HEAPING ON HEIGHT", function(tr) sprintf('"%s" dataset; teams %s', n, tr),
                        caption = paste0(sprintf("Heaping: %s ends in .0 or .5 (about 20%% expected).", e$height),
                                         if (isTRUE(o$exclude_height_codes)) " Heights >= 900 (missing codes) excluded." else ""),
-                       ylab = "Percent", facet = "team")
+                       ylab = "Percent", facet = "team", shade = period_weeks(p, n))
   sec <- list(dataset = n, plots = plots, average = avg, data = s[, .(dataset = n, team, team_label, woi, pct_heaping = value, measured = cnt)])
-  list(id = "ant_heap", title = "ANTHROPOMETRY - HEAPING ON HEIGHT PER TEAM AND PER WEEK OF FIELDWORK", sections = list(sec), data = sec$data)
+  # by measurer (the person who reads the board: what teams act on)
+  mt <- NULL
+  if (!is.null(e$measurer) && e$measurer %in% names(x)) {
+    x[, measurer := suppressWarnings(as.numeric(get(e$measurer)))]
+    pb <- period_bounds(p$cfg)
+    mt <- x[!is.na(heaping) & !is.na(measurer) & !is.na(team), .(measured = .N, pct_heaping = mean(heaping) * 100,
+              measured_period = sum(!is.na(doi) & doi >= pb$start & doi <= pb$end),
+              pct_heaping_period = if (any(!is.na(doi) & doi >= pb$start & doi <= pb$end)) mean(heaping[!is.na(doi) & doi >= pb$start & doi <= pb$end]) * 100 else NA_real_),
+            by = .(team, measurer)]
+    mt <- add_labels(mt, p)[order(team, -pct_heaping)]
+  }
+  list(id = "ant_heap", title = "ANTHROPOMETRY - HEAPING ON HEIGHT PER TEAM AND PER WEEK OF FIELDWORK", sections = list(sec), data = sec$data,
+       measurers = mt, measurer_var = e$measurer, period = period_bounds(p$cfg)$label)
 }
 
 period_bounds <- function(cfg) {
@@ -272,7 +300,7 @@ out_ant_oor <- function(p) {
   s <- x[!is.na(woi), .(value = mean(oor) * 100, cnt = .N), by = .(team, woi)]
   s <- add_labels(s, p); s[, interv := team]
   plots <- panel_pages(s, "value", "cnt", avg, o, "PERC. OF OUT-OF-RANGE/FLAGGED ANTHRO. RESULTS", function(tr) sprintf('"%s" dataset; teams %s', n, tr),
-                       caption = paste("Out-of-range/flagged:", paste(sprintf("%s=%s", fl, o$outrange), collapse = " OR ")), ylab = "Percent", facet = "team")
+                       caption = paste("Out-of-range/flagged:", paste(sprintf("%s=%s", fl, o$outrange), collapse = " OR ")), ylab = "Percent", facet = "team", shade = period_weeks(p, n))
   sec <- list(dataset = n, plots = plots, average = avg, data = s[, .(dataset = n, team, team_label, woi, pct_oor = value, measured = cnt)])
   list(id = "ant_oor", title = "ANTHROPOMETRY - OUT-OF-RANGE/FLAGGED RESULTS PER TEAM AND PER WEEK OF FIELDWORK", sections = list(sec),
        data = sec$data, cases = cases, period = pb$label, case_labels = p$meta[[n]]$varlab)

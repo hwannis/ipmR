@@ -4,7 +4,13 @@
 \alias{ipm_ai_evidence}
 \title{Evidence pack sent to the AI}
 \usage{
-ipm_ai_evidence(res, sc = ipm_scorecard(res), max_teams = 40, team = NULL)
+ipm_ai_evidence(
+  res,
+  sc = ipm_scorecard(res),
+  max_teams = 40,
+  team = NULL,
+  compact = FALSE
+)
 }
 \arguments{
 \item{res}{result of run_ipm()}
@@ -14,6 +20,9 @@ ipm_ai_evidence(res, sc = ipm_scorecard(res), max_teams = 40, team = NULL)
 \item{max_teams}{maximum number of teams detailed (highest priority first)}
 
 \item{team}{optional team label: adds that team's flag tables (answer counts per interviewer) for questions about it}
+
+\item{compact}{smaller evidence for local models (about a third of the size): High/Medium priority teams only,
+3 readings per team, fewer interviewers, modules and survey-wide signals}
 }
 \description{
 Aggregated statistics only: survey totals, the team and interviewer scorecards, modules and questions

@@ -1,3 +1,34 @@
+# ipmR 0.6.0
+
+Second batch from the backlog (BACKLOG.md items in brackets).
+
+**Long tasks and several users**
+* The analysis, the report build and the AI calls (plan, question, connection test) run in a separate R process: one user's task no longer blocks the other users of the same server, and the app stays usable while it runs (#14, #15). Needs the callr package (in the Docker image); without it the tasks run as before. A task still running is stopped when its session ends.
+
+**Teams**
+* Teams defined by interviewer ranges are labelled with the supervisor / team leader code the field teams use, e.g. T3 (208); the Teams page shows the code of each team (#25). The AI plan check and the questions recognise "T3", "team 3" or "208".
+
+**Figures**
+* Graphs of flags by module: point at (or tap) a circle to see the flag table of that interviewer and question (#12).
+* Each graph can be downloaded as SVG (sharp at any size) or as a high-resolution PNG; all the graphs of an output can be shown on one scrolling page; larger sample-size numbers below the dots (#11).
+* Charts of outputs 2-8 keep the whole fieldwork and shade the weeks of the period of analysis; new option to show only those weeks (`period_weeks_only`) (#22).
+
+**Anthropometry**
+* Heaping on height by measurer (AN7), whole fieldwork and period of analysis: table in the report, measurers named in the summary, the scorecard evidence and the action (#28).
+
+**Reading the flag rate**
+* The summary, the rule-based plan and the AI instructions no longer say "x times what chance would produce": the % flagged is compared with the nominal 0.1%, with an explanation of why it is not a measure of size (#30).
+* Files with several records per household (members, nets, births...) are named in the summary with their records per household: their tests are not on independent units and they flag more easily (#27).
+* Sparse chi-square tables (#26): checked by simulation - with many answer categories and few cases the test is conservative (fewer false flags than 0.1%), and pooling rare categories does not reduce flags; no change made.
+
+**AI**
+* Compact evidence for local models: only High/Medium priority teams, 3 readings per team, fewer interviewers, modules and survey-wide signals (about a third of the size); ticked by default for Ollama / OpenAI-compatible connections (#18).
+
+**Other**
+* Fix: the app did not start on a server with no AI connection configured ("attempt to set an attribute on NULL") (#32).
+* The app header and the Guide show the ipmR version (#31).
+* Flag settings: why ignoring CAPI-filled, derived and identifier variables matters for the flag rates (#7).
+
 # ipmR 0.5.0
 
 First batch release from the backlog (BACKLOG.md items in brackets); most items come from Pierre Martel's review.

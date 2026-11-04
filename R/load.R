@@ -14,7 +14,7 @@ needed_vars <- function(cfg, nm, vars) {
   d <- cfg$datasets[[nm]]; o <- cfg$options
   if (any(trimws(d$flag_modules) == "*")) return(vars)
   nx <- function(v, k) { if (is.null(v) || !length(v)) return(NULL); i <- match(v[1], vars); if (is.na(i) || i + k > length(vars)) NULL else vars[i + k] }
-  v <- c("HH1", "HH2", "LN", d$keys, d$interviewer, d$result, cfg$teams$variable,
+  v <- c("HH1", "HH2", "LN", d$keys, d$interviewer, d$result, cfg$teams$variable, d$supervisor, if (identical(cfg$extras$ant$dataset, nm)) cfg$extras$ant$measurer,
          d$day, d$month %||% nx(d$day, 1), d$year %||% nx(d$day, 2),
          d$start_hour, d$start_min %||% nx(d$start_hour, 1), d$end_hour, d$end_min %||% nx(d$end_hour, 1))
   for (ch in names(cfg$datasets)) if (identical(cfg$datasets[[ch]]$parent, nm)) v <- c(v, cfg$datasets[[ch]]$keys)
@@ -148,7 +148,7 @@ ipm_prepare <- function(data, cfg, quiet = FALSE, inplace = FALSE) {
   }
   order_ds <- c(names(ds_cfg)[vapply(ds_cfg, function(d) is.null(d$parent), logical(1))],
                 names(ds_cfg)[vapply(ds_cfg, function(d) !is.null(d$parent), logical(1))])
-  out <- list(); stdates <- list()
+  out <- list(); stdates <- list(); supcodes <- list()
   for (nm in order_ds) {
     d <- ds_cfg[[nm]]; x <- if (inplace) data$raw[[nm]] else copy(data$raw[[nm]])
     if (!is.null(d$parent)) {
@@ -185,6 +185,8 @@ ipm_prepare <- function(data, cfg, quiet = FALSE, inplace = FALSE) {
     # team
     sup <- if (!is.null(cfg$teams$variable) && cfg$teams$variable %in% names(x)) as.numeric(x[[cfg$teams$variable]]) else NULL
     x[, team := assign_teams(interv, sup, cfg, team_levels)]
+    if (!is.null(d$supervisor) && d$supervisor %in% names(x) && is.numeric(x[[d$supervisor]]))
+      supcodes[[nm]] <- x[!is.na(team) & !is.na(get(d$supervisor)), .(team, sup = as.numeric(get(d$supervisor)))]
     out[[nm]] <- x
   }
   # week of interview: int((doi - start)/7) + 1, missing if <= 0 (Stata truncation kept)
@@ -197,8 +199,16 @@ ipm_prepare <- function(data, cfg, quiet = FALSE, inplace = FALSE) {
     out[[nm]][woi <= 0, woi := NA_integer_]
   }
   # team labels
-  tl <- if (!is.null(cfg$teams$variable)) data.table(team = seq_along(team_levels), team_label = sprintf("T%d (%s)", seq_along(team_levels), team_levels))
-        else data.table(team = seq_along(cfg$teams$ranges), team_label = sprintf("T%d", seq_along(cfg$teams$ranges)))
+  # team labels: T1, T2 ... plus the supervisor / team leader code the field teams use, when known
+  tl <- if (!is.null(cfg$teams$variable)) data.table(team = seq_along(team_levels), team_label = sprintf("T%d (%s)", seq_along(team_levels), fmt_int(team_levels)))
+        else {
+          tl <- data.table(team = seq_along(cfg$teams$ranges), team_label = sprintf("T%d", seq_along(cfg$teams$ranges)))
+          if (length(supcodes)) {
+            sc <- rbindlist(supcodes)[, .N, by = .(team, sup)][order(team, -N)][, .SD[1], by = team]
+            i <- match(sc$team, tl$team); tl$team_label[i] <- sprintf("T%d (%s)", sc$team, fmt_int(sc$sup))
+          }
+          tl
+        }
   for (nm in names(out)) {
     lab <- out[[nm]][!is.na(interv), .N, by = .(interv, team)][order(interv, -N)][, .SD[1], by = interv]
     lab[, interv_label := ifelse(is.na(team), sprintf("%g (no team)", interv), sprintf("%g (T%d)", interv, team))]

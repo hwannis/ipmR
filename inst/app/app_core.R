@@ -37,7 +37,7 @@ fw_text <- function(fw) if (is.null(fw)) NULL else
           fw$source %||% "household questionnaire", fmt_d(fw$first), fmt_d(fw$last), as.integer(fw$days), format(fw$interviews, big.mark = ","))
 AI_CONNS <- tryCatch(ipm_ai_connections(), error = function(e) { message("AI settings: ", conditionMessage(e)); list() })   # server connections (keys stay on the server)
 AI_CUSTOM <- ipm_ai_allow_custom()
-AI_CHOICES <- c(stats::setNames(names(AI_CONNS), vapply(AI_CONNS, function(x) x$label, "")),
+AI_CHOICES <- c(if (length(AI_CONNS)) stats::setNames(names(AI_CONNS), vapply(AI_CONNS, function(x) x$label, "")),   # none configured: empty
                 if (AI_CUSTOM) c("My own connection (this session only)" = "custom"))
 if (!length(AI_CHOICES)) AI_CHOICES <- c("No AI model configured on this server" = "")
 fmt_i <- function(x) format(x, scientific = FALSE, trim = TRUE)
@@ -45,6 +45,40 @@ prio_col <- c(High = "#E2231A", Medium = "#F26A21", Low = "#00833D")
 md_html <- function(x) {
   x <- gsub("<", "&lt;", x %||% "", fixed = TRUE)                     # model output is never trusted as HTML
   if (requireNamespace("commonmark", quietly = TRUE)) HTML(commonmark::markdown_html(x, extensions = TRUE)) else tags$pre(style = "white-space:pre-wrap", x)
+}
+
+# ---------------- background jobs ----------------
+# Long tasks (run, report, AI calls) run in a separate R process (callr), so that one user's task never blocks
+# the other users of the same server; the session polls the process every second. Without callr, or with
+# options(ipmR.background = FALSE), they run in the app process as before.
+BG_SRC <- if ("package:ipmR" %in% search()) NULL else if (dir.exists("R")) normalizePath("R") else NA_character_   # NULL: the installed package; else the bundle's R/ folder
+BG_OK <- !isFALSE(getOption("ipmR.background", TRUE)) && requireNamespace("callr", quietly = TRUE) && !identical(BG_SRC, NA_character_)
+bg_child <- function(what, args, pf, src, libs) {
+  .libPaths(libs)
+  if (is.null(src)) suppressPackageStartupMessages(library(ipmR))
+  else {                                                      # stand-alone bundle: the functions are in R/
+    for (pk in c("data.table", "haven", "ggplot2", "officer", "flextable", "openxlsx", "yaml", "tidyselect", "scales", "jsonlite"))
+      suppressPackageStartupMessages(library(pk, character.only = TRUE))
+    for (f in list.files(src, pattern = "[.][Rr]$", full.names = TRUE)) sys.source(f, envir = globalenv())
+  }
+  suppressPackageStartupMessages(library(data.table))
+  prog <- function(m) cat(paste0(m, "\n"), file = pf, append = TRUE)
+  switch(what,
+    run = {
+      res <- run_ipm(args$cfg, write = FALSE, progress = prog, keep_data = FALSE)
+      prog("Writing summary"); res$summary <- tryCatch(ipm_summary(res), error = function(e) NULL)
+      prog("Team scorecard"); sc <- tryCatch(ipm_scorecard(res), error = function(e) conditionMessage(e))
+      list(res = res, sc = sc) },
+    report = {
+      unlink(args$dir, recursive = TRUE)
+      rep <- ipm_report(args$res, args$dir, progress = prog)
+      prog("Zipping all results"); unlink(args$zip)
+      old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
+      utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq")
+      list(report = rep, zip = args$zip) },
+    plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact),
+    ask = ipm_ai_ask(args$q, args$res, args$sc, args$st, history = args$history, language = args$language, compact = args$compact),
+    test = ipm_ai_test(args$st))
 }
 
 # ---------------- data protection helpers ----------------
@@ -68,7 +102,8 @@ idle_js <- sprintf("
 
 
 ipm_ui <- page_navbar(
-  title = tags$span(tags$b("IPM"), " Interviewer Performance Monitoring for MICS"),
+  title = tags$span(tags$b("IPM"), " Interviewer Performance Monitoring for MICS",
+                    tags$span(style = "font-size:0.7em; opacity:0.85; margin-left:10px", paste0("ipmR ", .int$version %||% ""))),
   theme = theme, id = "nav", fillable = FALSE, bg = cyan, inverse = TRUE,
   header = tags$head(tags$script(HTML(idle_js)), tags$style(HTML("
     .navbar .navbar-brand, .navbar .nav-link {color:white !important}
@@ -128,6 +163,7 @@ ipm_ui <- page_navbar(
             actionButton("pp_7", "Last 7 days", class = "btn-sm"), actionButton("pp_14", "Last 14 days", class = "btn-sm"),
             actionButton("pp_21", "Last 21 days", class = "btn-sm"), actionButton("pp_all", "Whole fieldwork", class = "btn-sm")),
         uiOutput("period_info"),
+        checkboxInput("o_period_weeks_only", "Charts of outputs 2-8: show only the weeks of the period of analysis (otherwise the whole fieldwork, with those weeks shaded)", FALSE),
         checkboxGroupInput("outputs", "Outputs", choices = stats::setNames(names(output_names), output_names), width = "100%"),
         checkboxGroupInput("hhm_groups", "Household member groups (output 4)", inline = TRUE,
                            choices = stats::setNames(names(hhm_defs), vapply(hhm_defs, `[[`, "", "label")))),
@@ -144,7 +180,7 @@ ipm_ui <- page_navbar(
 
   # ---------------- 4. TEAMS ----------------
   nav_panel("4. Teams", value = "teams",
-    explain("Assigns each interviewer to a team. All comparisons are made within teams (an interviewer is compared with team-mates working in the same clusters), so correct teams are essential. Teams were derived automatically from the supervisor / team leader number.",
+    explain("Assigns each interviewer to a team. All comparisons are made within teams (an interviewer is compared with team-mates working in the same clusters), so correct teams are essential. Teams were derived automatically from the supervisor / team leader number; in the results each team is labelled T1, T2 ... followed by that code, e.g. T3 (103), so the field teams recognise it.",
             "Check in the right-hand table that each team contains the right interviewers and that no interviewer is 'NOT ASSIGNED'. If needed, edit the ranges (one line per team, e.g. 102-106) or use the team-leader variable instead, then click 'Refresh'."),
     layout_columns(col_widths = c(5, 7),
       card(card_header("Team definition"),
@@ -163,7 +199,7 @@ ipm_ui <- page_navbar(
             "Review the modules and the variables to ignore, then click 'Check flag settings' and go through the list: ideally every module is tested, and every variable that is not a direct question to the respondent or a direct observation is ignored. This takes time the first time (save the settings to reuse them). The advanced parameters reproduce the original IPM defaults; change them only if you know why."),
     uiOutput("flag_ui"),
     div(style = "border:1px solid #e3e3e3; padding:10px 16px; margin:12px 0", tags$h5(class = "sch", style = "margin-top:4px", "Check the flag settings"),
-      p(class = "small-note", "Lists every variable of the modules to test with its label and status (tested or ignored), as the check in the Stata application. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored: they change the % of tests flagged. Review it the first time you set up a survey; the settings can then be saved and reused."),
+      p(class = "small-note", "Lists every variable of the modules to test with its label and status (tested or ignored), as the check in the Stata application. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored, because they change the % of tests flagged: CAPI-filled and derived variables are almost never flagged, so they lower the % of a module and hide its real problems; identifiers and staff codes give meaningless flags. Review it the first time you set up a survey; the settings can then be saved and reused."),
       div(actionButton("fc_run", "Check flag settings", class = "btn-primary"), downloadButton("fc_dl", "Download the full list (CSV)", class = "btn-sm")),
       uiOutput("fc_problems"), DT::DTOutput("fc_modules"), DT::DTOutput("fc_vars")),
     card(card_header("Advanced parameters"),
@@ -227,6 +263,7 @@ ipm_ui <- page_navbar(
             uiOutput("ai_status"),
             tags$hr(style = "margin:4px 0"),
             selectInput("ai_lang", "Language of the plan", c("English", "French", "Spanish", "Portuguese", "Arabic"), width = "100%"),
+            checkboxInput("ai_compact", "Compact evidence (High/Medium teams only, about a third of the size: faster and better with local models)", FALSE),
             actionButton("ai_go", "Generate AI action plan", class = "btn-primary", width = "100%"),
             actionButton("rules_go", "Rule-based plan (no AI)", width = "100%"),
             actionButton("ai_preview", "Preview what is sent to the AI", width = "100%"),
@@ -238,8 +275,16 @@ ipm_ui <- page_navbar(
             actionButton("ai_ask", "Ask", class = "btn-primary"))),
         uiOutput("plan_ui")),
       nav_panel("Figures", value = "figures",
-        explain("All graphs of the IPM report, one at a time.", "Choose a graph in the list; read the 'How to read' note below it."),
-        uiOutput("fig_select"), uiOutput("fig_howto"), plotOutput("fig", height = "650px")),
+        explain("All graphs of the IPM report, one at a time or all the graphs of an output on one scrolling page. On the graphs of flags by module, point at (or tap) a circle to see the flag table of that interviewer and question.",
+                "Choose a graph in the list; read the 'How to read' note below it. Use the download buttons for a sharp version to enlarge, print or put in a presentation (SVG can be zoomed without loss)."),
+        fluidRow(column(8, uiOutput("fig_select")),
+                 column(4, radioButtons("fig_mode", NULL, c("One graph" = "one", "All graphs of this output on one page" = "all"), inline = TRUE))),
+        uiOutput("fig_howto"),
+        conditionalPanel("input.fig_mode == 'one'",
+          div(style = "margin-bottom:6px", downloadButton("fig_svg", "Sharp version (SVG)", class = "btn-sm"), downloadButton("fig_png", "High-resolution image (PNG)", class = "btn-sm")),
+          plotOutput("fig", height = "650px", hover = hoverOpts("fig_hover", delay = 150, delayType = "debounce"), click = "fig_click"),
+          uiOutput("fig_point")),
+        conditionalPanel("input.fig_mode == 'all'", uiOutput("fig_all"))),
       nav_panel("Flag explorer", value = "explorer",
         explain("Lists every flagged test (one interviewer x one question) with a one-line reading of the difference with team-mates. Click a row to see the full table of answers for the team.",
                 "Filter by team, interviewer or module using the boxes above the columns. Typical uses: prepare a supervision visit (filter a team), check a suspicious interviewer, or check whether a question is flagged in many teams (question problem)."),
@@ -271,7 +316,7 @@ ipm_ui <- page_navbar(
       p("Recommended rhythm: every 1-2 weeks from the 2nd-3rd week of fieldwork, with the last 2-3 weeks as period of analysis; share a limited number of priorities with the field teams each time."),
       tags$h5("How to read each output"),
       tags$dl(lapply(names(output_names), function(id) tagList(tags$dt(output_names[[id]]), tags$dd(howto[[id]] %||% ""))))),
-    p(class = "small-note", "ipmR - R port of the Stata IPM application v7.0.0 developed by Pierre Martel for UNICEF MICS."))
+    p(class = "small-note", sprintf("ipmR %s - R port of the Stata IPM application v7.0.0 developed by Pierre Martel for UNICEF MICS.", .int$version %||% "")))
 )
 
 ipm_server <- function(input, output, session) {
@@ -280,8 +325,9 @@ ipm_server <- function(input, output, session) {
   sdir <- file.path(tempdir(), paste0("ipm_", session$token)); dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
   upload_dirs <- character()                       # Shiny's own temporary copies of uploaded files
   rv <- reactiveValues(cfg = NULL, light = NULL, res = NULL, log = character(), report = NULL, zip = NULL, n_files = 0,
-                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character())
+                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
   cleanup <- function() {
+    if (exists("kill_jobs")) kill_jobs()
     wipe(c(sdir, upload_dirs))
     isolate({ rv$cfg <- NULL; rv$light <- NULL; rv$res <- NULL; rv$report <- NULL; rv$zip <- NULL
               rv$sc <- NULL; rv$plan <- NULL; rv$chat <- list(); rv$ai_user <- NULL; rv$ai_test <- NULL })
@@ -299,6 +345,64 @@ ipm_server <- function(input, output, session) {
     Sys.sleep(2); session$reload()
   })
   logm <- function(...) rv$log <- c(rv$log, paste(format(Sys.time(), "%H:%M:%S"), ...))
+
+  # ---------- background jobs (see bg_child) ----------
+  bg <- new.env()
+  job_running <- function(key) !is.null(bg[[key]])
+  # step: progress added per message; hold: messages matching it update the text only
+  start_job <- function(key, what, args, title, detail = NULL, done, step = 1 / 25, hold = NULL, log = FALSE) {
+    if (job_running(key)) { showNotification("This task is already running: wait for it to finish.", type = "warning"); return(invisible(FALSE)) }
+    if (!BG_OK) {                                                # in-process fallback (blocks this R process)
+      r <- withProgress(message = title, detail = detail, value = 0.05, {
+        pf <- tempfile(tmpdir = sdir, fileext = ".log"); on.exit(unlink(pf), add = TRUE)
+        tryCatch(bg_child_local(what, args, function(m) { if (log) logm(m); if (!is.null(hold) && grepl(hold, m)) setProgress(detail = m) else incProgress(step, detail = m) }),
+                 error = function(e) e) })
+      done(r); return(invisible(TRUE))
+    }
+    dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
+    pf <- tempfile(tmpdir = sdir, fileext = ".log"); file.create(pf)
+    p <- tryCatch(callr::r_bg(bg_child, args = list(what = what, args = args, pf = pf, src = BG_SRC, libs = .libPaths()), supervise = TRUE),
+                  error = function(e) { showNotification(paste("Could not start the task:", conditionMessage(e)), type = "error", duration = NULL); NULL })
+    if (is.null(p)) return(invisible(FALSE))
+    pr <- shiny::Progress$new(session, min = 0, max = 1); pr$set(message = title, detail = detail, value = 0.02)
+    bg[[key]] <- list(p = p, pf = pf, pr = pr, done = done, n = 0L, v = 0.02, step = step, hold = hold, log = log)
+    rv$jobs <- rv$jobs + 1L
+    invisible(TRUE)
+  }
+  bg_child_local <- function(what, args, prog) {               # same jobs, in this process
+    switch(what,
+      run = { res <- run_ipm(args$cfg, write = FALSE, progress = prog, keep_data = FALSE)
+              prog("Writing summary"); res$summary <- tryCatch(ipm_summary(res), error = function(e) NULL)
+              prog("Team scorecard"); list(res = res, sc = tryCatch(ipm_scorecard(res), error = function(e) conditionMessage(e))) },
+      report = { unlink(args$dir, recursive = TRUE); rep <- ipm_report(args$res, args$dir, progress = prog)
+                 prog("Zipping all results"); unlink(args$zip); old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
+                 utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq"); list(report = rep, zip = args$zip) },
+      plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact),
+      ask = ipm_ai_ask(args$q, args$res, args$sc, args$st, history = args$history, language = args$language, compact = args$compact),
+      test = ipm_ai_test(args$st))
+  }
+  job_error <- function(r) { e <- if (!is.null(r$parent)) r$parent else r; msg <- conditionMessage(e)
+    if (!nzchar(msg)) msg <- "the task stopped without a message (out of memory?)"; msg }
+  observe({
+    rv$jobs; alive <- FALSE
+    for (key in ls(bg)) {
+      j <- bg[[key]]
+      msgs <- tryCatch(readLines(j$pf, warn = FALSE), error = function(e) character())
+      if (length(msgs) > j$n) {
+        for (m in msgs[(j$n + 1L):length(msgs)]) {
+          if (j$log) isolate(logm(m))
+          if (is.null(j$hold) || !grepl(j$hold, m)) j$v <- min(0.95, j$v + j$step)
+        }
+        j$pr$set(value = j$v, detail = utils::tail(msgs, 1)); j$n <- length(msgs); bg[[key]] <- j
+      }
+      if (j$p$is_alive()) { alive <- TRUE; next }
+      j$pr$close(); rm(list = key, envir = bg); unlink(j$pf)
+      r <- tryCatch(j$p$get_result(), error = function(e) e)
+      isolate(j$done(r))
+    }
+    if (alive) invalidateLater(1000)
+  })
+  kill_jobs <- function() for (key in ls(bg)) { j <- bg[[key]]; try(j$p$kill(), silent = TRUE); try(j$pr$close(), silent = TRUE); unlink(j$pf); rm(list = key, envir = bg) }
   if (!is.null(pre <- getOption("ipmR.preload"))) isolate({   # testing only: preload a saved result
     rv$res <- readRDS(pre); rv$sc <- tryCatch(ipm_scorecard(rv$res), error = function(e) NULL) })
 
@@ -356,6 +460,7 @@ ipm_server <- function(input, output, session) {
     updateNumericInput(session, "o_levelsig", value = o$levelsig); updateNumericInput(session, "o_test_min", value = o$test_min)
     updateNumericInput(session, "o_max_uniq", value = o$max_uniq); updateNumericInput(session, "o_highly_flag", value = o$highly_flag)
     updateSelectInput(session, "o_woi_anchor", selected = o$woi_anchor); updateCheckboxInput(session, "o_test_min_nonmissing", value = o$test_min_nonmissing)
+    updateCheckboxInput(session, "o_period_weeks_only", value = isTRUE(o$period_weeks_only))
   }
   observeEvent(input$cfg_upload, {
     req(rv$cfg); cfg <- read_config(input$cfg_upload$datapath)
@@ -465,14 +570,14 @@ ipm_server <- function(input, output, session) {
     tagList(
       mk("hhm", "Household members list (sex 1=M 2=F; age in years)", list(sex = "Sex", age = "Age")),
       mk("bh", "Birth history (death coded 2; age at death in months)", list(death = "Living status", age_death = "Age at death (months, or number if a unit is given)", age_death_unit = "Age at death unit (optional)")),
-      mk("ant", "Anthropometry (height in cm; flags coded 1)", list(height = "Height / length", flags = "Out-of-range / flag variables")))
+      mk("ant", "Anthropometry (height in cm; flags coded 1)", list(height = "Height / length", flags = "Out-of-range / flag variables", measurer = "Measurer number (heaping by measurer)")))
   })
   outputOptions(output, "extras_ui", suspendWhenHidden = FALSE)
   for (k in c("hhm", "bh", "ant")) local({
     key <- k
     observeEvent(input[[paste0("ex_", key, "_dataset")]], {
       ds <- input[[paste0("ex_", key, "_dataset")]]; req(rv$light)
-      flds <- switch(key, hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags"))
+      flds <- switch(key, hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags", "measurer"))
       for (f in flds) updateSelectizeInput(session, paste0("ex_", key, "_", f), choices = var_choices(rv$light$meta, ds),
                                            selected = if (identical(ds, rv$cfg$extras[[key]]$dataset)) rv$cfg$extras[[key]][[f]] else "")
     }, ignoreInit = TRUE)
@@ -534,12 +639,12 @@ ipm_server <- function(input, output, session) {
     cfg$hhm_groups <- g("hhm_groups", cfg$hhm_groups)
     for (k in c("hhm", "bh", "ant")) {
       ds_k <- nz(g(paste0("ex_", k, "_dataset"), cfg$extras[[k]]$dataset))
-      flds <- switch(k, hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags"))
+      flds <- switch(k, hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags", "measurer"))
       if (is.null(ds_k)) { cfg$extras[[k]] <- NULL; next }
       e <- list(dataset = ds_k); for (f in flds) e[[f]] <- nz(g(paste0("ex_", k, "_", f), cfg$extras[[k]][[f]]))
       cfg$extras[[k]] <- e
     }
-    for (k in c("levelsig", "test_min", "max_uniq", "highly_flag", "woi_anchor", "test_min_nonmissing")) cfg$options[[k]] <- g(paste0("o_", k), cfg$options[[k]])
+    for (k in c("levelsig", "test_min", "max_uniq", "highly_flag", "woi_anchor", "test_min_nonmissing", "period_weeks_only")) cfg$options[[k]] <- g(paste0("o_", k), cfg$options[[k]])
     cfg
   }
   output$cfg_download <- downloadHandler(filename = function() "ipm_settings.yml", content = function(f) {
@@ -554,32 +659,35 @@ ipm_server <- function(input, output, session) {
     input$team_preview; cfg <- isolate(collect_cfg())
     rows <- list()
     for (n in names(cfg$datasets)) { d <- cfg$datasets[[n]]; if (is.null(d$interviewer)) next
-      cols <- c(d$interviewer, cfg$teams$variable)
+      cols <- unique(c(d$interviewer, cfg$teams$variable, d$supervisor))
       x <- tryCatch(.int$read_cols(file.path(cfg$data_dir, d$file), cols), error = function(e) NULL); if (is.null(x) || !d$interviewer %in% names(x)) next
       iv <- as.numeric(x[[d$interviewer]]); sup <- if (!is.null(cfg$teams$variable) && cfg$teams$variable %in% names(x)) as.numeric(x[[cfg$teams$variable]]) else NULL
-      rows[[n]] <- data.table(interv = iv, sup = if (is.null(sup)) NA_real_ else sup) }
-    req(length(rows)); a <- unique(rbindlist(rows))[!is.na(interv)]
+      code <- if (!is.null(d$supervisor) && d$supervisor %in% names(x)) suppressWarnings(as.numeric(x[[d$supervisor]])) else NA_real_
+      rows[[n]] <- data.table(interv = iv, sup = if (is.null(sup)) NA_real_ else sup, code = code) }
+    req(length(rows)); a <- rbindlist(rows)[!is.na(interv)]
     lv <- if (!is.null(cfg$teams$variable)) sort(unique(a$sup)) else NULL
     a[, team := .int$assign_teams(interv, if (is.null(lv)) NULL else sup, cfg, lv)]
+    if (!is.null(lv)) a[, code := sup]
+    codes <- a[!is.na(team) & !is.na(code), .N, by = .(team, code)][order(team, -N)][, .(code = paste(fmt_i(code), collapse = ", ")), by = team]
     a <- unique(a[, .(interv, team)])
-    a[order(team, interv), .(interviewers = paste(sort(unique(interv)), collapse = ", "), n = uniqueN(interv)),
-      by = .(team = ifelse(is.na(team), "NOT ASSIGNED (excluded)", paste0("T", team)))]
+    out <- a[order(team, interv), .(interviewers = paste(sort(unique(interv)), collapse = ", "), n = uniqueN(interv)), by = team]
+    out[, `supervisor / team leader code` := codes$code[match(team, codes$team)]]
+    out[, team := ifelse(is.na(team), "NOT ASSIGNED (excluded)", paste0("T", team))]
+    out[is.na(`supervisor / team leader code`), `supervisor / team leader code` := ""]
+    out
   })
 
   # ---------- run ----------
   observeEvent(input$run, {
-    req(rv$cfg); cfg <- collect_cfg(); rv$log <- character(); rv$report <- NULL; rv$zip <- NULL
-    rv$res <- NULL; gc(verbose = FALSE)
-    withProgress(message = "Running the IPM", value = 0, {
-      prog <- function(m) { logm(m); incProgress(1 / 25, detail = m) }
-      res <- tryCatch(run_ipm(cfg, write = FALSE, progress = prog, keep_data = FALSE),
-                      error = function(e) { logm("ERROR:", conditionMessage(e)); showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
-      if (!is.null(res)) { incProgress(0, detail = "Writing summary"); res$summary <- tryCatch(ipm_summary(res), error = function(e) NULL) }
-      rv$sc <- if (!is.null(res)) tryCatch(ipm_scorecard(res), error = function(e) { logm("Scorecard:", conditionMessage(e)); NULL })
-      rv$plan <- NULL; rv$chat <- list()
-      rv$res <- res
-    })
-    if (!is.null(rv$res)) { logm("Done."); nav_to("results") }
+    req(rv$cfg); if (job_running("run")) { showNotification("The analysis is already running.", type = "warning"); return() }
+    cfg <- collect_cfg(); rv$log <- character(); rv$report <- NULL; rv$zip <- NULL
+    rv$res <- NULL; rv$sc <- NULL; rv$plan <- NULL; rv$chat <- list(); gc(verbose = FALSE)
+    start_job("run", "run", list(cfg = cfg), "Running the IPM", if (BG_OK) "you can keep using the app; other users are not slowed down" else NULL, log = TRUE,
+      done = function(r) {
+        if (inherits(r, "error")) { m <- job_error(r); logm("ERROR:", m); showNotification(m, type = "error", duration = NULL); return() }
+        if (is.character(r$sc)) { logm("Scorecard:", r$sc); r$sc <- NULL }
+        rv$sc <- r$sc; rv$res <- r$res; logm("Done."); nav_to("results")
+      })
   })
   output$log <- renderText(paste(rev(rv$log), collapse = "\n"))
 
@@ -590,7 +698,7 @@ ipm_server <- function(input, output, session) {
     div(k(format(sum(res$data_summary$records), big.mark = ","), "records analysed"),
         k(sum(!is.na(unique(res$team_info$team))), "teams defined"),
         if (!is.null(fa$tests)) k(format(nrow(fa$tests), big.mark = ","), "flag tests"),
-        if (!is.null(fa$tests)) k(sprintf("%.1f%%", mean(fa$tests$flag) * 100), "of tests flagged (0.1% expected by chance)"),
+        if (!is.null(fa$tests)) k(sprintf("%.1f%%", mean(fa$tests$flag) * 100), "of tests flagged (nominal level 0.1%)"),
         k(sprintf("%s - %s", fmt_d(min(as.Date(res$data_summary$first_day), na.rm = TRUE)), fmt_d(max(as.Date(res$data_summary$last_day), na.rm = TRUE))), "fieldwork: first - last interview"),
         if (!is.null(fa$period)) k(fa$period, "period of analysis"))
   })
@@ -655,6 +763,7 @@ ipm_server <- function(input, output, session) {
   }
   observeEvent(conn(), {
     c0 <- conn(); rv$ai_test <- NULL; rv$stale_model <- isolate(input$ai_model); rv$listed <- character()
+    updateCheckboxInput(session, "ai_compact", value = c0$provider %in% c("ollama", "openai"))
     updateSelectizeInput(session, "ai_model", choices = if (nzchar(c0$model)) c0$model else character(), selected = c0$model)
     if (c0$provider %in% c("ollama", "openai")) list_models(quiet = TRUE)        # local endpoints: list the installed models straight away
   })
@@ -668,8 +777,8 @@ ipm_server <- function(input, output, session) {
   observeEvent(input$ai_test, {
     st <- ai_st()
     if (!isTRUE(st$ready)) { rv$ai_test <- list(ok = FALSE, message = "Not ready: choose a connection and a model (and a key for Claude)."); return() }
-    withProgress(message = "Testing the model", detail = if (st$provider == "ollama") "the first call loads the model: up to a minute" else NULL, value = 0.5,
-                 rv$ai_test <- ipm_ai_test(st))
+    start_job("ai_test", "test", list(st = st), "Testing the model", if (st$provider == "ollama") "the first call loads the model: up to a minute" else NULL,
+              done = function(r) rv$ai_test <- if (inherits(r, "error")) list(ok = FALSE, message = job_error(r)) else r)
   })
   output$ai_status <- renderUI({
     st <- ai_st(); tr <- rv$ai_test
@@ -688,9 +797,10 @@ ipm_server <- function(input, output, session) {
   observeEvent(input$ai_preview, {
     if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st(); q <- trimws(input$ai_q %||% "")
-    rv$prev <- list(plan = ipm_ai_preview(rv$res, rv$sc, st, "plan", language = input$ai_lang),
+    cmp <- isTRUE(input$ai_compact)
+    rv$prev <- list(plan = ipm_ai_preview(rv$res, rv$sc, st, "plan", language = input$ai_lang, compact = cmp),
                     question = ipm_ai_preview(rv$res, rv$sc, st, "question", question = if (nzchar(q)) q else "Which team should the coordinator visit first, and why?",
-                                              history = rv$chat, language = input$ai_lang))
+                                              history = rv$chat, language = input$ai_lang, compact = cmp))
     one <- function(pv, id, what) {
       ctx <- pv$body$options$num_ctx
       tagList(
@@ -721,10 +831,11 @@ ipm_server <- function(input, output, session) {
     if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st()
     if (!isTRUE(st$ready)) { showNotification("No AI model ready: choose a connection and a model, or use the rule-based plan.", type = "warning"); return() }
-    withProgress(message = sprintf("%s is writing the action plan", st$model), detail = if (st$provider == "ollama") "local models can take several minutes" else "30 seconds to 2 minutes", value = 0.3, {
-      p <- tryCatch(ipm_ai_plan(rv$res, rv$sc, st, language = input$ai_lang), error = function(e) { showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
-    })
-    if (!is.null(p)) { rv$plan <- p; r <- rv$res; r$action_plan <- p; rv$res <- r }
+    start_job("ai_plan", "plan", list(res = rv$res, sc = rv$sc, st = st, language = input$ai_lang, compact = isTRUE(input$ai_compact)),
+      sprintf("%s is writing the action plan", st$model), if (st$provider == "ollama") "local models can take several minutes" else "30 seconds to 2 minutes",
+      done = function(p) {
+        if (inherits(p, "error")) { showNotification(job_error(p), type = "error", duration = NULL); return() }
+        rv$plan <- p; r <- rv$res; r$action_plan <- p; rv$res <- r })
   })
   observeEvent(input$rules_go, { if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }; rv$plan <- ipm_plan_rules(rv$sc); r <- rv$res; r$action_plan <- NULL; rv$res <- r })
   output$plan_ui <- renderUI({
@@ -766,10 +877,11 @@ ipm_server <- function(input, output, session) {
     if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st()
     if (!isTRUE(st$ready)) { showNotification("No AI model configured.", type = "warning"); return() }
-    withProgress(message = sprintf("%s is answering", st$model), detail = if (st$provider == "ollama") "local models re-read the whole evidence: 1-5 minutes" else NULL, value = 0.4, {
-      a <- tryCatch(ipm_ai_ask(q, rv$res, rv$sc, st, history = rv$chat, language = input$ai_lang), error = function(e) { showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
-    })
-    if (!is.null(a)) { rv$chat <- c(rv$chat, list(list(q = q, a = a$answer, team = a$team))); updateTextAreaInput(session, "ai_q", value = "") }
+    start_job("ai_ask", "ask", list(q = q, res = rv$res, sc = rv$sc, st = st, history = rv$chat, language = input$ai_lang, compact = isTRUE(input$ai_compact)),
+      sprintf("%s is answering", st$model), if (st$provider == "ollama") "local models re-read the whole evidence: 1-5 minutes" else NULL,
+      done = function(a) {
+        if (inherits(a, "error")) { showNotification(job_error(a), type = "error", duration = NULL); return() }
+        rv$chat <- c(rv$chat, list(list(q = q, a = a$answer, team = a$team))); updateTextAreaInput(session, "ai_q", value = "") })
   })
   output$chat <- renderUI({
     ch <- rv$chat; if (!length(ch)) return(p(class = "small-note", "Answers use the same aggregated evidence as the plan (run the analysis first); when you name a team (e.g. 'T4' or 'team 4'), its flag tables (answer counts per interviewer) are added. Local models take 1-5 minutes per answer: watch the progress bar at the bottom right."))
@@ -783,15 +895,61 @@ ipm_server <- function(input, output, session) {
       r <- res$outputs[[id]]
       if (id == "flaganal") { for (i in seq_along(r$plots)) { z <- r$plots[[i]]
           nm <- sprintf("Flags | %s", switch(z$type, summary = "summary by dataset and module", dataset = paste(z$dataset, "- by interviewer"), module = paste(z$dataset, "- module", sub("\\*$", "", z$module), i)))
-          out[[nm]] <- list(plot = z$plot, how = howto[[paste0("flag_", z$type)]]) } }
+          out[[nm]] <- list(plot = z$plot, how = howto[[paste0("flag_", z$type)]], type = z$type,
+                            group = if (z$type == "summary") "Flags | summary" else paste("Flags |", z$dataset), dataset = z$dataset) } }
       else for (s in r$sections) for (j in seq_along(s$plots))
-        out[[sprintf("%s | %s%s%s", output_names[[id]], s$dataset %||% "", if (!is.null(s$group)) paste0(" - ", hhm_defs[[s$group]]$label) else "", if (length(s$plots) > 1) paste0(" (page ", j, ")") else "")]] <- list(plot = s$plots[[j]], how = howto[[id]])
+        out[[sprintf("%s | %s%s%s", output_names[[id]], s$dataset %||% "", if (!is.null(s$group)) paste0(" - ", hhm_defs[[s$group]]$label) else "", if (length(s$plots) > 1) paste0(" (page ", j, ")") else "")]] <-
+          list(plot = s$plots[[j]], how = howto[[id]], type = id, group = output_names[[id]])
     }
     out
   })
   output$fig_select <- renderUI(selectInput("fig_pick", NULL, names(figs()), width = "100%"))
   output$fig_howto <- renderUI({ req(input$fig_pick); f <- figs()[[input$fig_pick]]; req(f); div(class = "howto", tags$b("How to read: "), f$how) })
-  output$fig <- renderPlot({ req(input$fig_pick); f <- figs()[[input$fig_pick]]; req(f); print(f$plot) }, res = 96)
+  output$fig <- renderPlot({ req(input$fig_pick); f <- figs()[[input$fig_pick]]; req(f); f$plot }, res = 96)   # returned, not printed: Shiny then knows the ggplot axes (hover)
+  fig_file <- function(f, file, type) {
+    g <- figs()[[input$fig_pick]]$plot; req(g)
+    if (type == "svg") { if (requireNamespace("svglite", quietly = TRUE)) svglite::svglite(file, width = 13, height = 8.3) else grDevices::svg(file, width = 13, height = 8.3) }
+    else if (requireNamespace("ragg", quietly = TRUE)) ragg::agg_png(file, width = 13, height = 8.3, units = "in", res = 220) else grDevices::png(file, width = 13, height = 8.3, units = "in", res = 220)
+    on.exit(grDevices::dev.off()); print(g)
+  }
+  fig_fname <- function(ext) function() sprintf("ipm_%s.%s", gsub("[^A-Za-z0-9]+", "_", substr(input$fig_pick %||% "figure", 1, 60)), ext)
+  output$fig_svg <- downloadHandler(filename = fig_fname("svg"), content = function(file) fig_file(NULL, file, "svg"))
+  output$fig_png <- downloadHandler(filename = fig_fname("png"), content = function(file) fig_file(NULL, file, "png"))
+  # all graphs of the same output: high-resolution images on one scrolling page
+  output$fig_all <- renderUI({
+    req(input$fig_pick, identical(input$fig_mode, "all")); fs <- figs(); f <- fs[[input$fig_pick]]; req(f)
+    nm <- names(fs)[vapply(fs, function(z) identical(z$group, f$group), logical(1))]
+    shown <- head(nm, 40)
+    imgs <- withProgress(message = "Drawing the graphs", value = 0, lapply(shown, function(n) {
+      incProgress(1 / length(shown), detail = n)
+      tf <- tempfile(tmpdir = sdir, fileext = ".png"); on.exit(unlink(tf))
+      if (requireNamespace("ragg", quietly = TRUE)) ragg::agg_png(tf, width = 12, height = 7.7, units = "in", res = 160) else grDevices::png(tf, width = 12, height = 7.7, units = "in", res = 160)
+      print(fs[[n]]$plot); grDevices::dev.off()
+      div(style = "margin:10px 0 26px 0", tags$h6(style = "color:#1CABE2; font-weight:bold", n),
+          tags$img(src = paste0("data:image/png;base64,", jsonlite::base64_enc(readBin(tf, "raw", file.info(tf)$size))), style = "width:100%; height:auto"))
+    }))
+    tagList(p(class = "small-note", sprintf("%d graph(s) of '%s'%s.", length(nm), f$group, if (length(nm) > 40) " - first 40 shown" else "")), imgs)
+  })
+  # flags by module: the flag table behind a circle
+  fig_pt <- reactiveVal(NULL)
+  observeEvent(input$fig_pick, fig_pt(NULL))
+  pick_point <- function(ev) {
+    f <- figs()[[input$fig_pick]]; if (is.null(f) || !identical(f$type, "module") || is.null(ev)) return()
+    d <- f$plot$data; d <- d[d$flag == 1, ]
+    np <- tryCatch(nearPoints(d, ev, xvar = "x", yvar = "yf", threshold = 10, maxpoints = 1), error = function(e) NULL)
+    if (!is.null(np) && nrow(np)) fig_pt(np)
+  }
+  observeEvent(input$fig_hover, pick_point(input$fig_hover))
+  observeEvent(input$fig_click, pick_point(input$fig_click))
+  output$fig_point <- renderUI({
+    f <- figs()[[input$fig_pick %||% ""]]
+    if (is.null(f) || !identical(f$type, "module")) return(NULL)
+    np <- fig_pt(); if (is.null(np)) return(p(class = "small-note", "Point at (or tap) a circle to see the flag table of that interviewer and question."))
+    tb <- Filter(function(z) z$dataset == np$dataset[1] && z$variable == np$varname[1] && z$interv == np$interv[1] && z$team == np$team[1], rv$res$outputs$flaganal$tables)
+    if (!length(tb)) return(p(class = "small-note", sprintf("Interviewer %s, question %s: flag table not available.", fmt_i(np$interv[1]), np$varname[1])))
+    z <- tb[[1]]
+    card(card_header(z$title), p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
+  })
 
   # ---------- results: flag explorer ----------
   flagged <- reactive({
@@ -848,19 +1006,15 @@ ipm_server <- function(input, output, session) {
   # ---------- downloads ----------
   observeEvent(input$build, {
     res <- rv$res; req(res)
-    before <- list.files(tempdir(), full.names = TRUE)
-    on.exit({ new <- setdiff(list.files(tempdir(), full.names = TRUE), before); wipe(new[!grepl("^ipm_", basename(new))]) }, add = TRUE)
-    unlink(res$cfg$results_dir, recursive = TRUE)
-    withProgress(message = "Building the report", value = 0, {
-      prog <- function(m) if (grepl("^Writing (flag tables|report: flag graphs)", m)) setProgress(detail = m) else incProgress(1 / 15, detail = m)
-      rv$report <- tryCatch(ipm_report(res, res$cfg$results_dir, progress = prog), error = function(e) { showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
-      if (!is.null(rv$report)) {
-        z <- file.path(sdir, "IPM_results.zip"); unlink(z)
-        old <- setwd(res$cfg$results_dir); on.exit(setwd(old))
-        utils::zip(z, list.files(".", recursive = TRUE), flags = "-r9Xq"); rv$zip <- z
-      }
-    })
-    if (!is.null(rv$report)) showNotification("Report ready - use the download buttons.", type = "message", duration = 8)
+    before <- if (!BG_OK) list.files(tempdir(), full.names = TRUE)
+    rv$report <- NULL; rv$zip <- NULL
+    start_job("report", "report", list(res = res, dir = res$cfg$results_dir, zip = file.path(sdir, "IPM_results.zip")), "Building the report",
+      if (BG_OK) "you can keep using the app while it is built" else NULL, step = 1 / 16, hold = "^Writing (flag tables|report: flag graphs)",
+      done = function(r) {
+        if (!is.null(before)) { new <- setdiff(list.files(tempdir(), full.names = TRUE), before); wipe(new[!grepl("^ipm_", basename(new))]) }
+        if (inherits(r, "error")) { showNotification(job_error(r), type = "error", duration = NULL); return() }
+        rv$report <- r$report; rv$zip <- r$zip
+        showNotification("Report ready - use the download buttons.", type = "message", duration = 8) })
   })
   output$dl_report <- downloadHandler(filename = function() sprintf("IPM_report_%s.docx", format(Sys.Date(), "%Y%m%d")),
                                       content = function(f) { req(rv$report); file.copy(rv$report, f) })

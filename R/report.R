@@ -126,6 +126,14 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
     doc <- add_heading(doc, r$title, 12)
     if (!is.null(ht[[id]])) doc <- add_text(doc, paste("How to read:", ht[[id]]), 8.5, TRUE)
     for (s in r$sections) for (g in s$plots) doc <- add_plot(doc, g, figdir, o)
+    if (id == "ant_heap" && !is.null(r$measurers) && nrow(r$measurers)) {
+      doc <- officer::body_add_break(doc)
+      doc <- add_heading(doc, sprintf("Heaping on height by measurer (%s)", r$measurer_var), 11)
+      doc <- add_text(doc, sprintf("Percentage of heights ending in .0 or .5 per measurer, whole fieldwork and period of analysis (%s); about 20%% expected. Measurers well above 20%% with many children measured should be retrained first.", r$period), 8.5, TRUE)
+      mt <- r$measurers[, .(Team = team_label, Measurer = fmt_int(measurer), Measured = measured, `% heaping` = round(pct_heaping, 0),
+                            `Measured (period)` = measured_period, `% heaping (period)` = round(pct_heaping_period, 0))]
+      doc <- flextable::body_add_flextable(doc, ipm_flextable(as.data.frame(mt), 7.5))
+    }
   }
   out <- file.path(results_dir, "IPM_report.docx")
   print(doc, target = out)
@@ -169,7 +177,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.5.0"
+IPMR_VERSION <- "0.6.0"
 utils_pkgver <- function() IPMR_VERSION
 
 report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL) {

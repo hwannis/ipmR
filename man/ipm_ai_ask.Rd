@@ -10,7 +10,8 @@ ipm_ai_ask(
   sc = ipm_scorecard(res),
   st = ipm_ai_settings(),
   history = list(),
-  language = "English"
+  language = "English",
+  compact = FALSE
 )
 }
 \arguments{
@@ -21,6 +22,8 @@ ipm_ai_ask(
 \item{history}{list of previous list(q, a) exchanges in this session (last 4 are sent)}
 
 \item{language}{answer language}
+
+\item{compact}{compact evidence for local models (see ipm_ai_evidence())}
 }
 \value{
 list(answer (markdown), usage, model, team)

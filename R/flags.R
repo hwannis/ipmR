@@ -155,7 +155,7 @@ flag_crosstab <- function(team_rows, var, lab) {
 #' @export
 flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, make_plots = TRUE) {
   o <- p$cfg$options; pb <- period_bounds(p$cfg)
-  tests <- list(); tables <- list(); retained <- list()
+  tests <- list(); tables <- list(); retained <- list(); clus <- list()
   dsl <- names(p$ds)[vapply(names(p$ds), function(n) length(p$cfg$datasets[[n]]$flag_modules) > 0, logical(1))]
   for (dsn in dsl) {
     progress(sprintf("Flag analysis: %s", dsn))
@@ -165,11 +165,15 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
     x <- x[!is.na(doi) & doi >= pb$start & doi <= pb$end]
     varlab <- p$meta[[dsn]]$varlab; fmt <- p$meta[[dsn]]$fmt; vallab <- p$meta[[dsn]]$vallab
     if (length(d$flag_units)) { r <- make_unit_value_pairs(x, d$flag_units, varlab); x <- r$x; varlab <- r$varlab }
+    hu <- intersect(o$hhunit, names(x))                             # records per household: tests on such files are not on independent units
+    if (length(hu) == length(o$hhunit) && nrow(x[!is.na(team) & !is.na(interv)]))
+      clus[[dsn]] <- data.table(dataset = dsn, records = nrow(x[!is.na(team) & !is.na(interv)]), households = uniqueN(x[!is.na(team) & !is.na(interv)], by = hu))
     data_vars <- setdiff(names(x), c(utility_vars, "interv_label"))
     ign <- expand_varlist(d$flag_ignore, data_vars)
     if (length(ign)) { x[, (ign) := NULL]; data_vars <- setdiff(data_vars, ign) }
     tx <- x[!is.na(team) & !is.na(interv)]
     if (!nrow(tx)) next
+
     # all-row counts per interviewer / team (Stata: tab int_team, summ int_team)
     cnt_all <- tx[, .(n_i = .N), by = .(team, interv)]
     cnt_all[, `:=`(N_t = sum(n_i), n_int = .N), by = team]
@@ -238,7 +242,8 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
     }
   }
   tests <- rbindlist(tests)
-  out <- list(tests = tests, tables = tables, period = pb$label, retained = rbindlist(retained))
+  out <- list(tests = tests, tables = tables, period = pb$label, retained = rbindlist(retained),
+              clustering = if (length(clus)) rbindlist(clus)[, per_household := records / households][] else NULL)
   if (!nrow(tests)) return(out)
   tests[, flag100 := flag * 100]
   sc <- list(

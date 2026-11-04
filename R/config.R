@@ -28,7 +28,8 @@ ipm_defaults <- function() {
     exclude_height_codes = TRUE,      # drop heights >= 900 (e.g. 999.6 not-measured codes) from heaping
     filter_parent_result = TRUE,      # linked datasets keep only records whose parent interview is completed
     drop_long_strings    = FALSE,     # TRUE: drop text variables longer than 1 character on load (names; saves memory, protects privacy)
-    fig_dpi              = 150
+    fig_dpi              = 150,
+    period_weeks_only    = FALSE      # TRUE: descriptive charts (outputs 2-8) show only the weeks of the period of analysis
   )
 }
 
@@ -336,7 +337,7 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   for (nm in names(meta)) {
     q <- detect_questionnaire(meta[[nm]])
     d <- list(file = meta[[nm]]$file)
-    if (!is.null(q)) { qinfo[[nm]] <- q; d[c("interviewer", "result", "day", "start_hour", "end_hour")] <- q[c("interviewer", "result", "day", "start_hour", "end_hour")] }
+    if (!is.null(q)) { qinfo[[nm]] <- q; d[c("interviewer", "result", "day", "start_hour", "end_hour", "supervisor")] <- q[c("interviewer", "result", "day", "start_hour", "end_hour", "supervisor")] }
     ds[[nm]] <- d
   }
   if (!length(qinfo)) stop("No MICS questionnaire detected (need interviewer, result and day-month-year variables). Configure datasets manually.")
@@ -398,6 +399,8 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   if (length(an)) {
     a <- an[1]; fl <- meta[[a]]$vars[grepl("^(HAZ|WAZ|WHZ)FLAG$", meta[[a]]$vars)]
     extras$ant <- list(dataset = a, height = "AN11", flags = fl)
+    ml <- meta[[a]]$lab; mv <- meta[[a]]$vars[grepl("measurer|mesureur|toiseur|medidor|antropometrista", ascii_fold(ml[meta[[a]]$vars]), ignore.case = TRUE)]
+    if (length(mv) || "AN7" %in% meta[[a]]$vars) extras$ant$measurer <- if ("AN7" %in% meta[[a]]$vars) "AN7" else mv[1]
   }
   teams <- derive_team_ranges(data_dir, ds, meta, qinfo)
   dates_of <- function(nm) {

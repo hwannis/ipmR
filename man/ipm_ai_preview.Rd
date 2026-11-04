@@ -11,7 +11,8 @@ ipm_ai_preview(
   what = c("plan", "question"),
   question = "Which team should the coordinator visit first, and why?",
   history = list(),
-  language = "English"
+  language = "English",
+  compact = FALSE
 )
 }
 \arguments{
@@ -24,6 +25,8 @@ ipm_ai_preview(
 \item{history}{earlier questions in the session}
 
 \item{language}{language of the answer}
+
+\item{compact}{compact evidence (see ipm_ai_evidence())}
 }
 \value{
 list(url, headers, body, json, chars, tokens_estimate, parts)
