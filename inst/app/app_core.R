@@ -908,7 +908,10 @@ ipm_server <- function(input, output, session) {
   output$fig <- renderPlot({ req(input$fig_pick); f <- figs()[[input$fig_pick]]; req(f); f$plot }, res = 96)   # returned, not printed: Shiny then knows the ggplot axes (hover)
   fig_file <- function(f, file, type) {
     g <- figs()[[input$fig_pick]]$plot; req(g)
-    if (type == "svg") { if (requireNamespace("svglite", quietly = TRUE)) svglite::svglite(file, width = 13, height = 8.3) else grDevices::svg(file, width = 13, height = 8.3) }
+    if (type == "svg") {
+      if (requireNamespace("svglite", quietly = TRUE)) svglite::svglite(file, width = 13, height = 8.3)
+      else if (isTRUE(capabilities("cairo"))) grDevices::svg(file, width = 13, height = 8.3)
+      else { showNotification("SVG is not available on this server (needs the svglite package or cairo): use the PNG download.", type = "warning", duration = 10); req(FALSE) } }
     else if (requireNamespace("ragg", quietly = TRUE)) ragg::agg_png(file, width = 13, height = 8.3, units = "in", res = 220) else grDevices::png(file, width = 13, height = 8.3, units = "in", res = 220)
     on.exit(grDevices::dev.off()); print(g)
   }
