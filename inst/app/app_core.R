@@ -590,7 +590,7 @@ ipm_server <- function(input, output, session) {
     DT::datatable(x$modules[, .(Dataset = dataset, Module = module, Variables = variables, Tested = tested, Ignored = ignored, `Ignored variables` = ignored_list)],
                   rownames = FALSE, selection = "single", filter = "top", fillContainer = FALSE, options = list(pageLength = 10, scrollX = TRUE),
                   caption = "Click a module to see its variables") })
-  output$fc_vars <- DT::renderDT({ x <- fc(); i <- input$fc_modules_rows_selected; req(length(i)); m <- x$modules[i]
+  output$fc_vars <- DT::renderDT({ x <- fc(); i <- input$fc_modules_rows_selected; req(length(i) > 0, i[1] <= nrow(x$modules)); m <- x$modules[i[1]]
     DT::datatable(x$variables[dataset == m$dataset & module == m$module, .(Variable = variable, Label = label, Status = status)], rownames = FALSE,
                   fillContainer = FALSE, options = list(pageLength = 50, dom = "tp"), caption = sprintf("%s, module %s", m$dataset, m$module)) |>
       DT::formatStyle("Status", color = DT::styleEqual("ignored", "#999999")) })
@@ -664,7 +664,7 @@ ipm_server <- function(input, output, session) {
       iv <- as.numeric(x[[d$interviewer]]); sup <- if (!is.null(cfg$teams$variable) && cfg$teams$variable %in% names(x)) as.numeric(x[[cfg$teams$variable]]) else NULL
       code <- if (!is.null(d$supervisor) && d$supervisor %in% names(x)) suppressWarnings(as.numeric(x[[d$supervisor]])) else NA_real_
       rows[[n]] <- data.table(interv = iv, sup = if (is.null(sup)) NA_real_ else sup, code = code) }
-    req(length(rows)); a <- rbindlist(rows)[!is.na(interv)]
+    req(length(rows) > 0); a <- rbindlist(rows)[!is.na(interv)]
     lv <- if (!is.null(cfg$teams$variable)) sort(unique(a$sup)) else NULL
     a[, team := .int$assign_teams(interv, if (is.null(lv)) NULL else sup, cfg, lv)]
     if (!is.null(lv)) a[, code := sup]
@@ -967,7 +967,7 @@ ipm_server <- function(input, output, session) {
   output$flag_detail <- renderUI({
     i <- input$flags_dt_rows_selected; req(i); f <- flagged()[i]
     tb <- Filter(function(z) z$dataset == f$dataset && z$variable == f$question && z$interv == f$interviewer, rv$res$outputs$flaganal$tables)
-    req(length(tb)); z <- tb[[1]]
+    req(length(tb) > 0); z <- tb[[1]]
     card(card_header(z$title), p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
   })
 
@@ -976,7 +976,7 @@ ipm_server <- function(input, output, session) {
     tags$table(class = "table table-sm table-striped", style = "width:auto !important; min-width:420px; font-size:0.88em",
       tags$thead(tags$tr(lapply(seq_along(df), function(j) { n <- names(df)[j]; tags$th(n, style = paste0(if (endsWith(n, "*")) "background:#374EA2;" else "background:#1CABE2;", " color:white; padding:2px 14px;", if (j > 1) " text-align:right" else "")) }))),
       tags$tbody(lapply(seq_len(nrow(df)), function(i) tags$tr(lapply(seq_along(df), function(j) tags$td(as.character(df[i, j]), style = if (j > 1) "text-align:right; padding:2px 14px" else "padding:2px 14px")))))) }
-  fgroups <- reactive({ t <- rv$res$outputs$flaganal$tables; req(length(t)); group_flag_tables(t) })
+  fgroups <- reactive({ t <- rv$res$outputs$flaganal$tables; req(length(t) > 0); group_flag_tables(t) })
   output$tt_team_ui <- renderUI({
     g <- fgroups(); tm <- vapply(g, `[[`, 0, "team"); ti <- rv$res$team_info
     n <- tapply(vapply(g, function(x) length(x$interviewers), 0), tm, sum)
@@ -987,7 +987,7 @@ ipm_server <- function(input, output, session) {
   tt_sel <- reactive({ req(input$tt_team); g <- fgroups()
     g[vapply(g, function(x) x$team == as.integer(input$tt_team) && (is.null(input$tt_ds) || !nzchar(input$tt_ds) || x$dataset == input$tt_ds), logical(1))] })
   output$tt_tables <- renderUI({
-    g <- tt_sel(); req(length(g)); shown <- head(g, 80)
+    g <- tt_sel(); req(length(g) > 0); shown <- head(g, 80)
     tagList(
       p(class = "small-note", sprintf("%d flagged questions%s.", length(g), if (length(g) > 80) " - first 80 shown; download the Word file for all" else "")),
       lapply(shown, function(x) card(card_header(x$title),

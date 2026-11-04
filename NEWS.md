@@ -26,6 +26,7 @@ Second batch from the backlog (BACKLOG.md items in brackets).
 
 **Other**
 * Fix: the app did not start on a server with no AI connection configured ("attempt to set an attribute on NULL") (#32).
+* Fix: "RHS of == is length 0" under the flag settings check when no module was selected; same guard fixed in the team preview, flag explorer and flag tables by team (#33).
 * The app header and the Guide show the ipmR version (#31).
 * Flag settings: why ignoring CAPI-filled, derived and identifier variables matters for the flag rates (#7).
 

@@ -67,3 +67,4 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 30 | The "x times what chance would produce" headline overstates the effect (sparse cells, non-independent tests); reword and explain. | HW | done (dev) |
 | 31 | The app does not show its version: add "ipmR x.y.z" to the header or footer so users can check which release the server runs. | HW | done (dev) |
 | 32 | The app does not start when no AI connection is configured on the server ("attempt to set an attribute on NULL"); since 0.4.0. | CL | done (dev) |
+| 33 | Flag settings check: "RHS of == is length 0" under the module table when no module is selected (req(length(x)) does not stop on 0; same pattern in 4 other places). | HW | done (dev) |
