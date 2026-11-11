@@ -11,5 +11,5 @@ out_fl(p)
 \description{
 Checks of the MICS foundational learning module (children age 7-14 in the 5-17 questionnaire), per interviewer and week:
 FL completed, median duration of the assessment, children who do not want to read, assessments stopped at the
-reading practice, reading story reached, numeracy stopped at the first task.
+reading practice, reading story reached, numeracy stopped after number reading.
 }

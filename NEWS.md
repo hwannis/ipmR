@@ -3,7 +3,7 @@
 Work on the dev branch since 0.6.0 (BACKLOG.md items in brackets).
 
 **Foundational learning**
-* New output `fl`: checks of the foundational learning assessment of the 5-17 questionnaire, per interviewer and week - FL completed (FL28), median duration from the start with the child (FL2) to the end of the interview, children who do not want to read (FL10), assessments stopped at the reading practice (FL14/FL15/FL17), reading story reached (FL19), numeracy stopped at the first task (FL23A) (#29).
+* New output `fl`: checks of the foundational learning assessment of the 5-17 questionnaire, per interviewer and week - FL completed (FL28), median duration from the start with the child (FL2) to the end of the interview, children who do not want to read (no at FL10A/B and not willing to try at FL10C), assessments stopped at the reading practice (FL14/FL15/FL17), reading story reached (FL19), numeracy stopped after number reading (FL23 check: skip to FL27) (#29). Checked against the Somalia 5-17 questionnaire: children 10-14 attending school go straight to the story without the practice (FL12), which is expected.
 * Interviewers far from team-mates (or with very short assessments) appear in the summary and the scorecard, with the action "observe the interviewer administering the assessment"; the variables are found automatically for MICS7 and can be changed on the Settings page (Variables for specific outputs).
 
 **Other**

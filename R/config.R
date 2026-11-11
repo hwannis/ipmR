@@ -194,7 +194,7 @@ validate_config <- function(cfg, data = NULL) {
     if (isTRUE(cfg$outputs$ant_oor) && !length(unlist(ex$ant$flags))) add("error", "extras", "no anthropometry flag variable set") }
   if (isTRUE(cfg$outputs$fl)) { e <- ex$fl; if (is.null(e$dataset)) add("error", "extras", "foundational learning dataset not set") else {
     chk(e$dataset, e$result, "FL result"); chk(e$dataset, e$start_hour, "FL start hour"); chk(e$dataset, e$end_hour, "FL end hour")
-    chk(e$dataset, e$read_agree, "FL wants to read"); chk(e$dataset, e$story, "FL story"); chk(e$dataset, e$numeracy_first, "FL first numeracy task")
+    chk(e$dataset, e$read_agree, "FL wants to read"); chk(e$dataset, e$read_try, "FL tries another language"); chk(e$dataset, e$story, "FL story"); chk(e$dataset, e$numeracy_first, "FL first numeracy task")
     chk(e$dataset, e$numeracy_next, "FL next numeracy task"); for (f in unlist(e$practice)) chk(e$dataset, f, "FL reading practice")
     if (is.null(e$result)) add("error", "extras", "foundational learning result variable not set") } }
   if (!length(iss)) return(data.frame(level = character(), where = character(), message = character()))
@@ -413,7 +413,7 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   if (length(fq)) {
     a <- fq[1]; v <- meta[[a]]$vars; pk <- function(c) { c <- intersect(c, v); if (length(c)) c[1] else NULL }
     extras$fl <- Filter(Negate(is.null), list(dataset = a, result = "FL28", start_hour = "FL2H", end_hour = ds[[a]]$end_hour,
-      read_agree = pk("FL10"), practice = intersect(c("FL14", "FL15", "FL17"), v), story = pk(c("FL19INTRO", "FL20A")),
+      read_agree = pk(c("FL10", "FL10A")), read_try = pk("FL10C"), practice = intersect(c("FL14", "FL15", "FL17"), v), story = pk(c("FL19INTRO", "FL20A")),
       numeracy_first = pk("FL23A"), numeracy_next = pk("FL24A")))
     if (!length(extras$fl$practice)) extras$fl$practice <- NULL
   }

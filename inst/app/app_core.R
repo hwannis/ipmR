@@ -5,7 +5,7 @@
 .int <- ipm_internals()
 output_names <- .int$output_names
 extra_fields <- list(hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags", "measurer"),
-                     fl = c("result", "start_hour", "end_hour", "read_agree", "practice", "story", "numeracy_first", "numeracy_next"))
+                     fl = c("result", "start_hour", "end_hour", "read_agree", "read_try", "practice", "story", "numeracy_first", "numeracy_next"))
 hhm_defs <- .int$hhm_defs
 cyan <- "#1CABE2"; dark <- "#374EA2"
 options(shiny.maxRequestSize = 400 * 1024^2)
@@ -574,7 +574,7 @@ ipm_server <- function(input, output, session) {
       mk("bh", "Birth history (death coded 2; age at death in months)", list(death = "Living status", age_death = "Age at death (months, or number if a unit is given)", age_death_unit = "Age at death unit (optional)")),
       mk("ant", "Anthropometry (height in cm; flags coded 1)", list(height = "Height / length", flags = "Out-of-range / flag variables", measurer = "Measurer number (heaping by measurer)")),
       mk("fl", "Foundational learning (5-17 questionnaire; result 1 = completed, wants to read 1 = yes)", list(result = "Result of the FL assessment (FL28)",
-         start_hour = "Start with the child - hour (FL2H)", end_hour = "End - hour (end of interview if empty)", read_agree = "Child wants to read (FL10)",
+         start_hour = "Start with the child - hour (FL2H)", end_hour = "End - hour (end of interview if empty)", read_agree = "Child wants to read (FL10)", read_try = "Tries a story in another language (FL10C; 95 = does not want to try)",
          practice = "Reading practice items, in order (FL14 FL15 FL17)", story = "Reading story started (FL19INTRO)",
          numeracy_first = "First numeracy task (FL23A)", numeracy_next = "Next numeracy task (FL24A)")))
   })

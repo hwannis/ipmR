@@ -8,6 +8,7 @@ add_synth_fs <- function(dir) {
   res <- sample(c(1, 1, 1, 1, 1, 1, 1, 2, 4), n, TRUE)
   done <- res == 1
   agree <- ifelse(done, sample(c(1, 1, 1, 2), n, TRUE), NA)
+  try_other <- ifelse(agree %in% 2, sample(c(11, 95), n, TRUE), NA)          # no at FL10A/B: offered the story in Somali
   fl14 <- ifelse(agree %in% 1, ifelse(bad, sample(1:2, n, TRUE, prob = c(.1, .9)), sample(1:2, n, TRUE, prob = c(.7, .3))), NA)
   story <- ifelse(fl14 %in% 1, 1, NA)
   fl23 <- ifelse(done, sample(1:3, n, TRUE, prob = c(.8, .1, .1)), NA)
@@ -23,7 +24,7 @@ add_synth_fs <- function(dir) {
     FS8H = lab(sh, "Start of interview - Hour"), FS8M = lab(sm, "Start of interview - Minutes"),
     FS11H = lab(sh + (sm + 10 + dur) %/% 60, "End of interview - Hour"), FS11M = lab((sm + 10 + dur) %% 60, "End of interview - Minutes"),
     FL2H = lab(sh + (sm + 10) %/% 60, "Start of interview with child - Hour"), FL2M = lab((sm + 10) %% 60, "Start of interview with child - Minutes"),
-    FL10 = lab(agree, "Like to read story"), FL14 = lab(fl14, "Child read every word in the practice correctly"),
+    FL10 = lab(agree, "Like to read story"), FL10C = lab(try_other, "Like to read story (other language)"), FL14 = lab(fl14, "Child read every word in the practice correctly"),
     FL19INTRO = lab(story, "FL19. INTRO"), FL23A = lab(fl23, "Child recognizes symbol: 9"), FL24A = lab(fl24, "Child identifies bigger of two numbers"),
     FL28 = lab(res, "Result of interview with child"))
   haven::write_sav(fs, file.path(dir, "fs.sav"))
@@ -37,7 +38,7 @@ test_that("FL checks are auto-configured, computed and find the planted intervie
   expect_equal(e$dataset, "fs")
   expect_equal(c(e$result, e$start_hour, e$end_hour, e$read_agree, e$story, e$numeracy_first, e$numeracy_next),
                c("FL28", "FL2H", "FS11H", "FL10", "FL19INTRO", "FL23A", "FL24A"))
-  expect_equal(e$practice, "FL14")
+  expect_equal(e$practice, "FL14"); expect_equal(e$read_try, "FL10C")
   expect_true(isTRUE(cfg$outputs$fl))
   cfg$period$start <- "2026-01-19"; cfg$period$days <- 13
   cfg$datasets$hh$flag_modules <- "HC*"; cfg$datasets$hh$flag_units <- "HC4U"
@@ -48,6 +49,7 @@ test_that("FL checks are auto-configured, computed and find the planted intervie
   expect_true(all(r$data[check != "minutes", value >= 0 & value <= 100]))
   expect_true(all(r$data[check == "minutes", value > 0 & value <= cfg$options$maxquestime]))
   expect_equal(unname(r$averages["num_exit"]), 20, tolerance = 5)
+  expect_equal(unname(r$averages["declined"]), 12.5, tolerance = 4)       # 25% say no, half of them then try in Somali
   pe <- r$data[check == "practice_exit", .(v = sum(value * n) / sum(n)), by = interv]
   expect_equal(pe[which.max(v), interv], 23)
   sc <- ipm_scorecard(res)

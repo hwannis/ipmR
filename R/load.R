@@ -22,7 +22,7 @@ needed_vars <- function(cfg, nm, vars) {
   if (identical(e$hhm$dataset, nm)) v <- c(v, e$hhm$sex, e$hhm$age, o$hhunit)
   if (identical(e$bh$dataset, nm)) v <- c(v, e$bh$death, e$bh$age_death, e$bh$age_death_unit, o$momunit)
   if (identical(e$fl$dataset, nm)) v <- c(v, e$fl$result, e$fl$start_hour, e$fl$start_min %||% nx(e$fl$start_hour, 1), e$fl$end_hour,
-                                         e$fl$end_min %||% nx(e$fl$end_hour, 1), e$fl$read_agree, unlist(e$fl$practice), e$fl$story,
+                                         e$fl$end_min %||% nx(e$fl$end_hour, 1), e$fl$read_agree, e$fl$read_try, unlist(e$fl$practice), e$fl$story,
                                          e$fl$numeracy_first, e$fl$numeracy_next)
   if (identical(e$ant$dataset, nm)) {
     h <- e$ant$height; mod <- if (!is.null(h) && grepl("^..[0-9]", h)) substr(h, 1, 2) else substr(h %||% "", 1, 3)

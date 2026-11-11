@@ -34,7 +34,7 @@ ipm_action_library <- function() list(
   anthro_oor = list(owner = "Measurer trainer", timing = "Immediately",
     action = "Use the anthropometry Excel listing for call-backs and re-measurement; check units and decimal entry, child age and measurement position (lying/standing)."),
   fl_assessment = list(owner = "Supervisor", timing = "Immediately",
-    action = "Observe interviewer %s administering the foundational learning assessment to 1-2 children: the child holds the Reading & Numbers book, the practice items are read as instructed and the stop rules are applied only when the child really fails; retrain if needed.")
+    action = "Observe interviewer %s administering the foundational learning assessment to 1-2 children: the child holds the Reading & Numbers book, the practice items are read as instructed, the stop rules (reading practice, first numbers) are applied only when the child really fails, and children who say no are offered the story in another language; retrain if needed.")
 )
 
 # foundational learning checks used by the scorecard and the summary: direction of concern and threshold vs team-mates
@@ -44,7 +44,7 @@ fl_rules <- list(
   declined      = list(dir = 1, gap = 20, min_n = 10, what = "children who do not want to read"),
   practice_exit = list(dir = 1, gap = 20, min_n = 10, what = "assessments stopped at the reading practice"),
   story         = list(dir = -1, gap = 20, min_n = 10, what = "children reaching the reading story"),
-  num_exit      = list(dir = 1, gap = 20, min_n = 10, what = "numeracy stopped at the first task")
+  num_exit      = list(dir = 1, gap = 20, min_n = 10, what = "numeracy stopped after number reading")
 )
 
 # interviewers whose FL indicators (last weeks) differ from team-mates (minutes: from the survey median)

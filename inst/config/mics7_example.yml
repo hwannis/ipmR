@@ -74,6 +74,7 @@ extras:
     result: FL28
     start_hour: FL2H
     read_agree: FL10
+    read_try: FL10C
     practice:
     - FL14
     - FL15

@@ -15,7 +15,7 @@ You don't need Stata. The package reads the SPSS (`.sav`) or Stata (`.dta`) fiel
 | 7 | Height heaping (.0/.5) per team and week | `out_ant_heap()` |
 | 8 | Out-of-range / flagged anthropometry, plus an Excel case listing | `out_ant_oor()` |
 | 9 | Flag analysis of interviewer bias (each interviewer vs the rest of the team, every question) | `flag_analysis()` |
-| FL | Foundational learning assessment per interviewer and week: completed, duration, child does not want to read, stopped at the reading practice, story reached, numeracy stopped at the first task | `out_fl()` |
+| FL | Foundational learning assessment per interviewer and week: completed, duration, child does not want to read, stopped at the reading practice, story reached, numeracy stopped after number reading | `out_fl()` |
 
 ## Files produced
 
@@ -183,7 +183,7 @@ extras:
   hhm: {dataset: hl, sex: HL4, age: HL6}
   bh:  {dataset: bh, death: BH5, age_death: BH9C}
   ant: {dataset: ch, height: AN11, flags: [HAZFLAG, WAZFLAG, WHZFLAG]}
-  fl:  {dataset: fs, result: FL28, start_hour: FL2H, read_agree: FL10, practice: [FL14, FL15, FL17],
+  fl:  {dataset: fs, result: FL28, start_hour: FL2H, read_agree: FL10, read_try: FL10C, practice: [FL14, FL15, FL17],
         story: FL19INTRO, numeracy_first: FL23A, numeracy_next: FL24A}   # end: the questionnaire end time
 datasets:
   hh: {file: hh.sav, interviewer: HH3, result: HH46, day: HH5D, start_hour: HH11H, end_hour: HH13H,

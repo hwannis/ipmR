@@ -312,10 +312,10 @@ out_ant_oor <- function(p) {
 fl_checks <- list(
   completed     = list(title = "FL ASSESSMENT COMPLETED", ylab = "Percent", among = "children eligible for the FL assessment (FL result recorded)"),
   minutes       = list(title = "MEDIAN DURATION OF THE FL ASSESSMENT", ylab = "Median duration (minutes)", among = "completed FL assessments"),
-  declined      = list(title = "CHILD DOES NOT WANT TO READ", ylab = "Percent", among = "children asked if they want to read"),
+  declined      = list(title = "CHILD DOES NOT WANT TO READ", ylab = "Percent", among = "children offered the reading story (FL10A/B or FL10C); declined = no at FL10A/B and not willing to try at FL10C"),
   practice_exit = list(title = "ASSESSMENT STOPPED AT THE READING PRACTICE", ylab = "Percent", among = "children who started the reading practice"),
   story         = list(title = "READING STORY REACHED", ylab = "Percent", among = "completed FL assessments"),
-  num_exit      = list(title = "NUMERACY STOPPED AT THE FIRST TASK", ylab = "Percent", among = "children who started the numeracy tasks")
+  num_exit      = list(title = "NUMERACY STOPPED AFTER NUMBER READING", ylab = "Percent", among = "children who started the numeracy tasks (fewer than 2 of the first 3 numbers correct: skip to FL27)")
 )
 
 # per child indicators of the FL checks (NA = not in the denominator of that check)
@@ -335,8 +335,11 @@ fl_child <- function(x, e, d, o) {
     minutes[!is.na(minutes) & minutes > o$maxquestime] <- o$maxquestime
   }
   out[, minutes := ifelse(done, minutes, NA_real_)]
-  ra <- num(e$read_agree)
-  out[, declined := ifelse(!is.na(ra), as.numeric(ra != 1) * 100, NA_real_)]
+  # reading offer: yes at FL10A/B, or else the story in another language at FL10C (language code 1-89 = accepted; 95 = does not want to try)
+  ra <- num(e$read_agree); rt <- num(e$read_try)
+  offered <- !is.na(ra) | !is.na(rt)
+  accepted <- ra %in% 1 | (!is.na(rt) & rt >= 1 & rt < 90)
+  out[, declined := ifelse(offered, as.numeric(!accepted) * 100, NA_real_)]
   story <- has(e$story)
   pr <- unlist(e$practice)
   started <- if (length(pr)) has(pr[1]) else rep(FALSE, nrow(x))
@@ -351,7 +354,7 @@ fl_child <- function(x, e, d, o) {
 #'
 #' Checks of the MICS foundational learning module (children age 7-14 in the 5-17 questionnaire), per interviewer and week:
 #' FL completed, median duration of the assessment, children who do not want to read, assessments stopped at the
-#' reading practice, reading story reached, numeracy stopped at the first task.
+#' reading practice, reading story reached, numeracy stopped after number reading.
 #' @param p prepared object from ipm_prepare()
 #' @export
 out_fl <- function(p) {
