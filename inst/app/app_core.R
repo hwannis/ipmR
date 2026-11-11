@@ -4,6 +4,8 @@
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || (length(a) == 1 && (is.na(a) || identical(a, "")))) b else a
 .int <- ipm_internals()
 output_names <- .int$output_names
+extra_fields <- list(hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags", "measurer"),
+                     fl = c("result", "start_hour", "end_hour", "read_agree", "practice", "story", "numeracy_first", "numeracy_next"))
 hhm_defs <- .int$hhm_defs
 cyan <- "#1CABE2"; dark <- "#374EA2"
 options(shiny.maxRequestSize = 400 * 1024^2)
@@ -163,7 +165,7 @@ ipm_ui <- page_navbar(
             actionButton("pp_7", "Last 7 days", class = "btn-sm"), actionButton("pp_14", "Last 14 days", class = "btn-sm"),
             actionButton("pp_21", "Last 21 days", class = "btn-sm"), actionButton("pp_all", "Whole fieldwork", class = "btn-sm")),
         uiOutput("period_info"),
-        checkboxInput("o_period_weeks_only", "Charts of outputs 2-8: show only the weeks of the period of analysis (otherwise the whole fieldwork, with those weeks shaded)", FALSE),
+        checkboxInput("o_period_weeks_only", "Descriptive charts (outputs 2-8 and FL): show only the weeks of the period of analysis (otherwise the whole fieldwork, with those weeks shaded)", FALSE),
         checkboxGroupInput("outputs", "Outputs", choices = stats::setNames(names(output_names), output_names), width = "100%"),
         checkboxGroupInput("hhm_groups", "Household member groups (output 4)", inline = TRUE,
                            choices = stats::setNames(names(hhm_defs), vapply(hhm_defs, `[[`, "", "label")))),
@@ -237,7 +239,7 @@ ipm_ui <- page_navbar(
           card(card_header("Flag rate by team"), DT::DTOutput("teams_dt")),
           card(card_header("Flag rate by interviewer"), DT::DTOutput("interv_dt")))),
       nav_panel("Team scorecard", value = "scorecard",
-        explain("One line per team with a priority level computed from all warning signs: excess of flags compared with the survey rate, modules where the team is far above the other teams, interviewers with many flags, very short interviews, low completion, omitted household members, births or deaths, height heaping and out-of-range anthropometry (last 3 weeks for the descriptive signs). Every sign is listed below with its evidence and the standard action.",
+        explain("One line per team with a priority level computed from all warning signs: excess of flags compared with the survey rate, modules where the team is far above the other teams, interviewers with many flags, very short interviews, low completion, omitted household members, births or deaths, height heaping, out-of-range anthropometry and the foundational learning checks (last 3 weeks for the descriptive signs). Every sign is listed below with its evidence and the standard action.",
                 "Start with the High-priority teams. Click a team in the first table to filter the list of warning signs. The same evidence is used by the action plan (next tab)."),
         uiOutput("sc_kpis"),
         tags$h5(class = "sch", "Teams (highest priority first)"), DT::DTOutput("sc_teams"),
@@ -565,19 +567,23 @@ ipm_server <- function(input, output, session) {
       ds <- e[[key]]$dataset %||% ""
       div(style = "border-bottom:1px solid #ddd; margin-bottom:8px", tags$b(title),
         selectInput(paste0("ex_", key, "_dataset"), "Dataset", dsn, ds),
-        lapply(names(fields), function(f) sel(paste0("ex_", key, "_", f), fields[[f]], var_choices(meta, ds), e[[key]][[f]], multiple = f == "flags")))
+        lapply(names(fields), function(f) sel(paste0("ex_", key, "_", f), fields[[f]], var_choices(meta, ds), e[[key]][[f]], multiple = f %in% c("flags", "practice"))))
     }
     tagList(
       mk("hhm", "Household members list (sex 1=M 2=F; age in years)", list(sex = "Sex", age = "Age")),
       mk("bh", "Birth history (death coded 2; age at death in months)", list(death = "Living status", age_death = "Age at death (months, or number if a unit is given)", age_death_unit = "Age at death unit (optional)")),
-      mk("ant", "Anthropometry (height in cm; flags coded 1)", list(height = "Height / length", flags = "Out-of-range / flag variables", measurer = "Measurer number (heaping by measurer)")))
+      mk("ant", "Anthropometry (height in cm; flags coded 1)", list(height = "Height / length", flags = "Out-of-range / flag variables", measurer = "Measurer number (heaping by measurer)")),
+      mk("fl", "Foundational learning (5-17 questionnaire; result 1 = completed, wants to read 1 = yes)", list(result = "Result of the FL assessment (FL28)",
+         start_hour = "Start with the child - hour (FL2H)", end_hour = "End - hour (end of interview if empty)", read_agree = "Child wants to read (FL10)",
+         practice = "Reading practice items, in order (FL14 FL15 FL17)", story = "Reading story started (FL19INTRO)",
+         numeracy_first = "First numeracy task (FL23A)", numeracy_next = "Next numeracy task (FL24A)")))
   })
   outputOptions(output, "extras_ui", suspendWhenHidden = FALSE)
-  for (k in c("hhm", "bh", "ant")) local({
+  for (k in c("hhm", "bh", "ant", "fl")) local({
     key <- k
     observeEvent(input[[paste0("ex_", key, "_dataset")]], {
       ds <- input[[paste0("ex_", key, "_dataset")]]; req(rv$light)
-      flds <- switch(key, hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags", "measurer"))
+      flds <- extra_fields[[key]]
       for (f in flds) updateSelectizeInput(session, paste0("ex_", key, "_", f), choices = var_choices(rv$light$meta, ds),
                                            selected = if (identical(ds, rv$cfg$extras[[key]]$dataset)) rv$cfg$extras[[key]][[f]] else "")
     }, ignoreInit = TRUE)
@@ -637,9 +643,9 @@ ipm_server <- function(input, output, session) {
     sel_out <- g("outputs", names(cfg$outputs)[unlist(cfg$outputs)])
     cfg$outputs <- as.list(stats::setNames(names(output_names) %in% sel_out, names(output_names)))
     cfg$hhm_groups <- g("hhm_groups", cfg$hhm_groups)
-    for (k in c("hhm", "bh", "ant")) {
+    for (k in c("hhm", "bh", "ant", "fl")) {
       ds_k <- nz(g(paste0("ex_", k, "_dataset"), cfg$extras[[k]]$dataset))
-      flds <- switch(k, hhm = c("sex", "age"), bh = c("death", "age_death", "age_death_unit"), ant = c("height", "flags", "measurer"))
+      flds <- extra_fields[[k]]
       if (is.null(ds_k)) { cfg$extras[[k]] <- NULL; next }
       e <- list(dataset = ds_k); for (f in flds) e[[f]] <- nz(g(paste0("ex_", k, "_", f), cfg$extras[[k]][[f]]))
       cfg$extras[[k]] <- e
@@ -898,7 +904,7 @@ ipm_server <- function(input, output, session) {
           out[[nm]] <- list(plot = z$plot, how = howto[[paste0("flag_", z$type)]], type = z$type,
                             group = if (z$type == "summary") "Flags | summary" else paste("Flags |", z$dataset), dataset = z$dataset) } }
       else for (s in r$sections) for (j in seq_along(s$plots))
-        out[[sprintf("%s | %s%s%s", output_names[[id]], s$dataset %||% "", if (!is.null(s$group)) paste0(" - ", hhm_defs[[s$group]]$label) else "", if (length(s$plots) > 1) paste0(" (page ", j, ")") else "")]] <-
+        out[[sprintf("%s | %s%s%s", output_names[[id]], s$dataset %||% "", if (!is.null(s$group)) paste0(" - ", hhm_defs[[s$group]]$label) else if (!is.null(s$label)) paste0(" - ", s$label) else "", if (length(s$plots) > 1) paste0(" (page ", j, ")") else "")]] <-
           list(plot = s$plots[[j]], how = howto[[id]], type = id, group = output_names[[id]])
     }
     out

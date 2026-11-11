@@ -42,6 +42,7 @@ ipm_output_names <- c(
   u5deaths   = "Percentage of under-5 deaths in birth histories per interviewer and per week of fieldwork",
   ant_heap   = "Anthropometry - heaping on height per team and per week of fieldwork",
   ant_oor    = "Anthropometry - out-of-range/flagged results per team and per week of fieldwork",
+  fl         = "Foundational learning assessment (5-17 questionnaire) per interviewer and per week of fieldwork",
   flaganal   = "Flag analysis of interviewer bias in specified modules and datasets over specified period"
 )
 
@@ -191,6 +192,11 @@ validate_config <- function(cfg, data = NULL) {
   if (isTRUE(cfg$outputs$everborn) || isTRUE(cfg$outputs$u5deaths)) { e <- ex$bh; if (is.null(e$dataset)) add("error", "extras", "birth history dataset not set") else { chk(e$dataset, e$death, "death"); chk(e$dataset, e$age_death, "age at death"); if (!is.null(e$age_death_unit)) chk(e$dataset, e$age_death_unit, "age at death unit") } }
   if (isTRUE(cfg$outputs$ant_heap) || isTRUE(cfg$outputs$ant_oor)) { e <- ex$ant; if (is.null(e$dataset)) add("error", "extras", "anthropometry dataset not set") else { chk(e$dataset, e$height, "height"); for (f in unlist(e$flags)) chk(e$dataset, f, "anthro flag") }
     if (isTRUE(cfg$outputs$ant_oor) && !length(unlist(ex$ant$flags))) add("error", "extras", "no anthropometry flag variable set") }
+  if (isTRUE(cfg$outputs$fl)) { e <- ex$fl; if (is.null(e$dataset)) add("error", "extras", "foundational learning dataset not set") else {
+    chk(e$dataset, e$result, "FL result"); chk(e$dataset, e$start_hour, "FL start hour"); chk(e$dataset, e$end_hour, "FL end hour")
+    chk(e$dataset, e$read_agree, "FL wants to read"); chk(e$dataset, e$story, "FL story"); chk(e$dataset, e$numeracy_first, "FL first numeracy task")
+    chk(e$dataset, e$numeracy_next, "FL next numeracy task"); for (f in unlist(e$practice)) chk(e$dataset, f, "FL reading practice")
+    if (is.null(e$result)) add("error", "extras", "foundational learning result variable not set") } }
   if (!length(iss)) return(data.frame(level = character(), where = character(), message = character()))
   do.call(rbind, iss)
 }
@@ -402,6 +408,15 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
     ml <- meta[[a]]$lab; mv <- meta[[a]]$vars[grepl("measurer|mesureur|toiseur|medidor|antropometrista", ascii_fold(ml[meta[[a]]$vars]), ignore.case = TRUE)]
     if (length(mv) || "AN7" %in% meta[[a]]$vars) extras$ant$measurer <- if ("AN7" %in% meta[[a]]$vars) "AN7" else mv[1]
   }
+  # foundational learning (MICS7 5-17 questionnaire): FL28 result, FL2H start with the child; FL is the last module, so it ends with the interview
+  fq <- names(meta)[vapply(meta, function(m) all(c("FL28", "FL2H") %in% m$vars), logical(1))]
+  if (length(fq)) {
+    a <- fq[1]; v <- meta[[a]]$vars; pk <- function(c) { c <- intersect(c, v); if (length(c)) c[1] else NULL }
+    extras$fl <- Filter(Negate(is.null), list(dataset = a, result = "FL28", start_hour = "FL2H", end_hour = ds[[a]]$end_hour,
+      read_agree = pk("FL10"), practice = intersect(c("FL14", "FL15", "FL17"), v), story = pk(c("FL19INTRO", "FL20A")),
+      numeracy_first = pk("FL23A"), numeracy_next = pk("FL24A")))
+    if (!length(extras$fl$practice)) extras$fl$practice <- NULL
+  }
   teams <- derive_team_ranges(data_dir, ds, meta, qinfo)
   dates_of <- function(nm) {
     d <- ds[[nm]]; v <- meta[[nm]]$vars; i <- match(d$day, v)
@@ -438,6 +453,7 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   if (is.null(extras$bh)) { cfg$outputs$everborn <- FALSE; cfg$outputs$u5deaths <- FALSE }
   if (is.null(extras$ant)) { cfg$outputs$ant_heap <- FALSE; cfg$outputs$ant_oor <- FALSE }
   else if (!length(extras$ant$flags)) cfg$outputs$ant_oor <- FALSE
+  if (is.null(extras$fl)) cfg$outputs$fl <- FALSE
   normalise_config(cfg)
 }
 

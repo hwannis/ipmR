@@ -1,3 +1,14 @@
+# ipmR (development version)
+
+Work on the dev branch since 0.6.0 (BACKLOG.md items in brackets).
+
+**Foundational learning**
+* New output `fl`: checks of the foundational learning assessment of the 5-17 questionnaire, per interviewer and week - FL completed (FL28), median duration from the start with the child (FL2) to the end of the interview, children who do not want to read (FL10), assessments stopped at the reading practice (FL14/FL15/FL17), reading story reached (FL19), numeracy stopped at the first task (FL23A) (#29).
+* Interviewers far from team-mates (or with very short assessments) appear in the summary and the scorecard, with the action "observe the interviewer administering the assessment"; the variables are found automatically for MICS7 and can be changed on the Settings page (Variables for specific outputs).
+
+**Other**
+* Fix: the report and the rule-based plan failed when the flag analysis was not part of the run (#34).
+
 # ipmR 0.6.0
 
 Second batch from the backlog (BACKLOG.md items in brackets).

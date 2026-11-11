@@ -32,8 +32,35 @@ ipm_action_library <- function() list(
   heaping = list(owner = "Measurer trainer", timing = "Immediately",
     action = "Retrain the team's measurers on reading the board to the last 0.1 cm (no rounding to .0/.5); repeat a standardisation exercise; supervisor checks a few measurements."),
   anthro_oor = list(owner = "Measurer trainer", timing = "Immediately",
-    action = "Use the anthropometry Excel listing for call-backs and re-measurement; check units and decimal entry, child age and measurement position (lying/standing).")
+    action = "Use the anthropometry Excel listing for call-backs and re-measurement; check units and decimal entry, child age and measurement position (lying/standing)."),
+  fl_assessment = list(owner = "Supervisor", timing = "Immediately",
+    action = "Observe interviewer %s administering the foundational learning assessment to 1-2 children: the child holds the Reading & Numbers book, the practice items are read as instructed and the stop rules are applied only when the child really fails; retrain if needed.")
 )
+
+# foundational learning checks used by the scorecard and the summary: direction of concern and threshold vs team-mates
+fl_rules <- list(
+  completed     = list(dir = -1, gap = 15, min_n = 10, what = "FL assessments completed"),
+  minutes       = list(dir = -1, ratio = 0.6, min_n = 5, what = "minutes per FL assessment"),
+  declined      = list(dir = 1, gap = 20, min_n = 10, what = "children who do not want to read"),
+  practice_exit = list(dir = 1, gap = 20, min_n = 10, what = "assessments stopped at the reading practice"),
+  story         = list(dir = -1, gap = 20, min_n = 10, what = "children reaching the reading story"),
+  num_exit      = list(dir = 1, gap = 20, min_n = 10, what = "numeracy stopped at the first task")
+)
+
+# interviewers whose FL indicators (last weeks) differ from team-mates (minutes: from the survey median)
+fl_concerns <- function(d) {
+  if (is.null(d) || !nrow(d)) return(NULL)
+  out <- list()
+  for (k in intersect(names(fl_rules), unique(d$check))) {
+    rl <- fl_rules[[k]]; x <- d[check == k]
+    a <- x[, .(v = sum(value * n) / sum(n), n = sum(n)), by = .(dataset, team, interv)]
+    if (k == "minutes") { a[, bm := stats::median(v)]; a <- a[n >= rl$min_n & v < rl$ratio * bm]; a[, high := v < 0.4 * bm] }
+    else { a[, bm := sum(v * n) / sum(n), by = team]
+      a <- a[n >= rl$min_n & rl$dir * (v - bm) > rl$gap]; a[, high := rl$dir * (v - bm) > 2 * rl$gap] }
+    if (nrow(a)) out[[k]] <- a[, check := k]
+  }
+  if (length(out)) rbindlist(out) else NULL
+}
 
 #' Team and interviewer scorecard
 #'
@@ -203,6 +230,15 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
               action = ac$action, owner = ac$owner, timing = ac$timing) }
   }
 
+  if (!is.null(d <- recent(r$fl$data)) && !is.null(cc <- fl_concerns(d))) {
+    desc$fl <- cc
+    for (i in seq_len(nrow(cc))) { h <- cc[i]; rl <- fl_rules[[h$check]]; ac <- la("fl_assessment", fmt_int(h$interv))
+      ev <- if (h$check == "minutes") sprintf("Median %.0f %s vs %.0f survey median (%d assessments, last %d weeks).", h$v, rl$what, h$bm, h$n, recent_weeks)
+            else sprintf("%s %s vs %s for team-mates (%d children, last %d weeks).", pctf(h$v, 0), rl$what, pctf(h$bm, 0), h$n, recent_weeks)
+      add_sig("interviewer", paste0("fl_", h$check), h$team, h$interv, dataset = h$dataset, module = "FL", severity = if (h$high) "high" else "medium",
+              value = h$v, benchmark = h$bm, evidence = ev, action = ac$action, owner = ac$owner, timing = ac$timing) }
+  }
+
   signals <- if (length(sig)) rbindlist(sig) else
     data.table(level = character(), type = character(), team = integer(), interv = numeric(), dataset = character(), module = character(),
                question = character(), severity = character(), value = numeric(), benchmark = numeric(), evidence = character(),
@@ -220,11 +256,14 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
   teams[, priority := fifelse(points >= 9 | high_team, "High", fifelse(points >= 3, "Medium", "Low"))]
   teams[, high_team := NULL]
   teams[, team_label := tl(team)]
+  # without a flag analysis the flag columns are missing: add them empty so that tables and plans work on the descriptive signals alone
+  for (k in c("tests", "flags", "interviewers_tested", "rate", "expected", "ratio", "p_excess")) if (!k %in% names(teams)) teams[, (k) := NA_real_]
   if (!is.null(tm)) {
     top <- tm[flags >= 3 & rate >= 2 * module_rate][order(-excess)][, .(top_modules = paste(head(sprintf("%s %s", dataset, module), 3), collapse = "; ")), by = team]
     teams <- merge(teams, top, by = "team", all.x = TRUE)
   }
-  ic <- signals[level == "interviewer", .(interviewers_of_concern = paste(sort(unique(fmt_int(interv))), collapse = ", ")), by = team]
+  if (!"top_modules" %in% names(teams)) teams[, top_modules := NA_character_]
+  ic <-signals[level == "interviewer", .(interviewers_of_concern = paste(sort(unique(fmt_int(interv))), collapse = ", ")), by = team]
   teams <- merge(teams, ic, by = "team", all.x = TRUE)
   teams[, prio_rank := match(priority, c("High", "Medium", "Low"))]
   setorder(teams, prio_rank, -points); teams[, prio_rank := NULL]

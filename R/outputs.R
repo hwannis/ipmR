@@ -305,3 +305,83 @@ out_ant_oor <- function(p) {
   list(id = "ant_oor", title = "ANTHROPOMETRY - OUT-OF-RANGE/FLAGGED RESULTS PER TEAM AND PER WEEK OF FIELDWORK", sections = list(sec),
        data = sec$data, cases = cases, period = pb$label, case_labels = p$meta[[n]]$varlab)
 }
+
+# ---- Foundational learning (FL) module of the 5-17 questionnaire (MICS7) ----
+
+# one chart per FL check: label, y-axis, kind ("pct" or "minutes"), description of the denominator
+fl_checks <- list(
+  completed     = list(title = "FL ASSESSMENT COMPLETED", ylab = "Percent", among = "children eligible for the FL assessment (FL result recorded)"),
+  minutes       = list(title = "MEDIAN DURATION OF THE FL ASSESSMENT", ylab = "Median duration (minutes)", among = "completed FL assessments"),
+  declined      = list(title = "CHILD DOES NOT WANT TO READ", ylab = "Percent", among = "children asked if they want to read"),
+  practice_exit = list(title = "ASSESSMENT STOPPED AT THE READING PRACTICE", ylab = "Percent", among = "children who started the reading practice"),
+  story         = list(title = "READING STORY REACHED", ylab = "Percent", among = "completed FL assessments"),
+  num_exit      = list(title = "NUMERACY STOPPED AT THE FIRST TASK", ylab = "Percent", among = "children who started the numeracy tasks")
+)
+
+# per child indicators of the FL checks (NA = not in the denominator of that check)
+fl_child <- function(x, e, d, o) {
+  num <- function(v) if (!is.null(v) && v %in% names(x)) suppressWarnings(as.numeric(x[[v]])) else rep(NA_real_, nrow(x))
+  has <- function(v) if (!is.null(v) && v %in% names(x)) { z <- x[[v]]; if (is.character(z)) !is.na(z) & nzchar(trimws(z)) else !is.na(z) } else rep(FALSE, nrow(x))
+  ok <- e$completed %||% 1
+  res <- num(e$result); elig <- !is.na(res); done <- elig & res %in% ok
+  out <- data.table(completed = ifelse(elig, as.numeric(done) * 100, NA_real_))
+  # duration: start of the assessment with the child to the end of the interview (FL is the last module)
+  minutes <- rep(NA_real_, nrow(x))
+  eh <- e$end_hour %||% d$end_hour
+  if (!is.null(e$start_hour) && e$start_hour %in% names(x) && !is.null(eh) && eh %in% names(x)) {
+    b <- hm_minutes(x, e$start_hour, e$start_min); en <- hm_minutes(x, eh, if (is.null(e$end_hour)) d$end_min else e$end_min)
+    minutes <- en$min - b$min
+    minutes[!is.na(minutes) & minutes <= 0] <- NA
+    minutes[!is.na(minutes) & minutes > o$maxquestime] <- o$maxquestime
+  }
+  out[, minutes := ifelse(done, minutes, NA_real_)]
+  ra <- num(e$read_agree)
+  out[, declined := ifelse(!is.na(ra), as.numeric(ra != 1) * 100, NA_real_)]
+  story <- has(e$story)
+  pr <- unlist(e$practice)
+  started <- if (length(pr)) has(pr[1]) else rep(FALSE, nrow(x))
+  out[, practice_exit := ifelse(started, as.numeric(!story) * 100, NA_real_)]
+  out[, story := ifelse(done, as.numeric(story) * 100, NA_real_)]
+  nf <- has(e$numeracy_first); nn <- has(e$numeracy_next)
+  out[, num_exit := ifelse(nf & !is.null(e$numeracy_next), as.numeric(!nn) * 100, NA_real_)]
+  out
+}
+
+#' Foundational learning (FL) assessment per interviewer and week
+#'
+#' Checks of the MICS foundational learning module (children age 7-14 in the 5-17 questionnaire), per interviewer and week:
+#' FL completed, median duration of the assessment, children who do not want to read, assessments stopped at the
+#' reading practice, reading story reached, numeracy stopped at the first task.
+#' @param p prepared object from ipm_prepare()
+#' @export
+out_fl <- function(p) {
+  o <- p$cfg$options; e <- p$cfg$extras$fl; n <- e$dataset; d <- p$cfg$datasets[[n]]
+  x <- p$ds[[n]]
+  if ("result" %in% names(x)) x <- x[result %in% o$interco]
+  ch <- fl_child(x, e, d, o)
+  x <- cbind(x[, .(team, interv, interv_label, woi, doi)], ch)
+  shade <- period_weeks(p, n)
+  secs <- list()
+  for (k in names(fl_checks)) {
+    if (all(is.na(x[[k]]))) next
+    ck <- fl_checks[[k]]
+    xx <- x[!is.na(get(k))]
+    if (k == "minutes") {
+      avg <- stats::median(xx[[k]])
+      s <- xx[!is.na(woi), .(value = stats::median(get(k)), cnt = .N), by = .(team, interv, woi)]
+    } else {
+      avg <- mean(xx[[k]])
+      s <- xx[!is.na(woi), .(value = mean(get(k)), cnt = .N), by = .(team, interv, woi)]
+    }
+    s <- merge(s, interv_lab_map(x), by = "interv"); s <- add_labels(s, p)
+    cap <- sprintf("Among %s.%s", ck$among, if (k == "minutes") sprintf(" From %s (start with the child) to %s (end of interview); capped at %d minutes.",
+                                                                      e$start_hour, e$end_hour %||% d$end_hour, o$maxquestime) else "")
+    ylim <- if (k == "minutes") c(0, o$maxquestime) else c(0, 100)
+    plots <- panel_pages(s, "value", "cnt", avg, o, ck$title, function(tr) sprintf('"%s" dataset; teams %s', n, tr), caption = cap, ylab = ck$ylab,
+                         ylim = ylim, ybreaks = if (k == "minutes") ggplot2::waiver() else seq(0, 100, 20), shade = shade)
+    secs[[k]] <- list(dataset = n, check = k, label = tolower(ck$title), plots = plots, average = avg,
+                      data = s[, .(dataset = n, check = k, team, interv, woi, value, n = cnt)])
+  }
+  list(id = "fl", title = "FOUNDATIONAL LEARNING ASSESSMENT PER INTERVIEWER AND PER WEEK OF FIELDWORK", sections = unname(secs),
+       data = rbindlist(lapply(secs, `[[`, "data")), averages = vapply(secs, `[[`, numeric(1), "average"), children = sum(!is.na(x$completed)))
+}

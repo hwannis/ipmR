@@ -22,7 +22,7 @@ run_ipm <- function(cfg, write = TRUE, progress = message, keep_data = TRUE) {
   rm(data); invisible(gc(verbose = FALSE))
   fns <- list(quesperday = out_quesperday, quescrates = out_quescrates, quesmtimes = out_quesmtimes,
               meannohhm = out_meannohhm, everborn = out_everborn, u5deaths = out_u5deaths,
-              ant_heap = out_ant_heap, ant_oor = out_ant_oor)
+              ant_heap = out_ant_heap, ant_oor = out_ant_oor, fl = out_fl)
   outputs <- list()
   for (id in names(ipm_output_names)) {
     if (!isTRUE(cfg$outputs[[id]])) next

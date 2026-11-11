@@ -2,7 +2,7 @@
 
 This is an R port of the Stata **IPM application v7.0.0** (Pierre Martel, 2024). It also includes a Shiny front-end that replaces the Stata dialog.
 
-You don't need Stata. The package reads the SPSS (`.sav`) or Stata (`.dta`) fieldwork exports and produces the same nine IPM outputs:
+You don't need Stata. The package reads the SPSS (`.sav`) or Stata (`.dta`) fieldwork exports and produces the nine IPM outputs of the Stata application, plus foundational learning checks:
 
 | # | Output | Function |
 |---|---|---|
@@ -15,6 +15,7 @@ You don't need Stata. The package reads the SPSS (`.sav`) or Stata (`.dta`) fiel
 | 7 | Height heaping (.0/.5) per team and week | `out_ant_heap()` |
 | 8 | Out-of-range / flagged anthropometry, plus an Excel case listing | `out_ant_oor()` |
 | 9 | Flag analysis of interviewer bias (each interviewer vs the rest of the team, every question) | `flag_analysis()` |
+| FL | Foundational learning assessment per interviewer and week: completed, duration, child does not want to read, stopped at the reading practice, story reached, numeracy stopped at the first task | `out_fl()` |
 
 ## Files produced
 
@@ -177,11 +178,13 @@ period: {start: '2026-09-20', days: 21}          # anthropometry listing + flag 
 teams:
   ranges: [102-106, 202-206, 209-212]             # T1, T2, T3 ... (or: variable: HH4)
 outputs: {quesperday: yes, quescrates: yes, quesmtimes: yes, meannohhm: yes, everborn: yes,
-          u5deaths: yes, ant_heap: yes, ant_oor: yes, flaganal: yes}
+          u5deaths: yes, ant_heap: yes, ant_oor: yes, fl: yes, flaganal: yes}
 extras:
   hhm: {dataset: hl, sex: HL4, age: HL6}
   bh:  {dataset: bh, death: BH5, age_death: BH9C}
   ant: {dataset: ch, height: AN11, flags: [HAZFLAG, WAZFLAG, WHZFLAG]}
+  fl:  {dataset: fs, result: FL28, start_hour: FL2H, read_agree: FL10, practice: [FL14, FL15, FL17],
+        story: FL19INTRO, numeracy_first: FL23A, numeracy_next: FL24A}   # end: the questionnaire end time
 datasets:
   hh: {file: hh.sav, interviewer: HH3, result: HH46, day: HH5D, start_hour: HH11H, end_hour: HH13H,
        flag_modules: [HC*, EU*, WS*, HW*], flag_ignore: [], flag_units: []}

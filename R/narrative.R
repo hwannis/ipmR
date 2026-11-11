@@ -10,6 +10,8 @@ ipm_howto <- function() list(
   everborn = "Mean number of births recorded per woman with a birth history. Interviewers with clearly lower values than team-mates may be omitting births (often dead children or children living elsewhere).",
   u5deaths = "Percentage of births in the birth history that are deaths under age 5. Interviewers recording no or very few deaths while team-mates do may be omitting dead children; unusually high values may indicate stillbirths recorded as live births.",
   ant_heap = "Percentage of heights ending in .0 or .5 cm, per team and week. With accurate measurement about 20% is expected. Much higher values mean measurers round or estimate heights; target them for retraining on reading the measuring board.",
+  fl = paste("Checks of the foundational learning (FL) assessment of children in the 5-17 questionnaire, one chart per check, per interviewer and week: FL completed, median duration (start with the child to end of interview), children who do not want to read, assessments stopped at the reading practice, reading story reached, numeracy stopped at the first task.",
+    "An interviewer far from team-mates working in the same clusters - very short assessments, many children stopped at the practice or at the first numeracy task, few reaching the story - may be ending the assessment early instead of giving each child the chance to try. Observe him/her administering the assessment."),
   ant_oor = "Percentage of children with out-of-range / flagged anthropometric results (implausible z-scores), per team and week. Higher values point to measurement or recording errors (wrong units, decimal point, age). The Excel listing gives the cases for call-backs.",
   flaganal = paste(
     "For every question and every interviewer, the answers recorded by the interviewer are compared with those of the rest of his/her team over the period of analysis (chi-square test for categorical answers, t-test for numeric answers).",
@@ -194,6 +196,12 @@ ipm_summary <- function(res) {
     av <- r$ant_oor$sections[[1]]$average
     x <- a[n >= 20 & v >= max(2 * av, 5)][order(-v)]
     if (nrow(x)) bd <- c(bd, sprintf("High share of out-of-range anthropometry (survey %s), last 3 weeks: %s - use the Excel listing for call-backs.", pct1(av), paste(sprintf("%s %.0f%%", tl(x$team), x$v), collapse = "; ")))
+  }
+  if (!is.null(r$fl) && !is.null(cc <- fl_concerns(recent(copy(r$fl$data))))) {
+    for (k in unique(cc$check)) { x <- cc[check == k][order(-abs(v - bm))]; rl <- fl_rules[[k]]
+      bd <- c(bd, sprintf("Foundational learning, %s (last 3 weeks) far from %s: %s - observe these interviewers administering the assessment.", rl$what,
+                          if (k == "minutes") "the survey median" else "team-mates",
+                          paste(sprintf(if (k == "minutes") "%g/%s %.0f min (survey %.0f)" else "%g/%s %.0f%% (team %.0f%%)", x$interv, tl(x$team), x$v, x$bm)[seq_len(min(nrow(x), 10))], collapse = "; "))) }
   }
   if (length(bd)) secs$descriptive <- list(title = "Other warning signs from the descriptive outputs", bullets = bd)
   secs$caveats <- list(title = "How to use these findings", bullets = c(

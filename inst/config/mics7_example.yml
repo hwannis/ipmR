@@ -42,6 +42,7 @@ outputs:
   u5deaths: yes
   ant_heap: yes
   ant_oor: yes
+  fl: yes
   flaganal: yes
 hhm_groups:
 - total
@@ -68,6 +69,18 @@ extras:
     - HAZFLAG
     - WAZFLAG
     - WHZFLAG
+  fl:
+    dataset: fs
+    result: FL28
+    start_hour: FL2H
+    read_agree: FL10
+    practice:
+    - FL14
+    - FL15
+    - FL17
+    story: FL19INTRO
+    numeracy_first: FL23A
+    numeracy_next: FL24A
 datasets:
   bh:
     file: bh.sav
