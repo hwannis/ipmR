@@ -349,7 +349,8 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   if (!length(qinfo)) stop("No MICS questionnaire detected (need interviewer, result and day-month-year variables). Configure datasets manually.")
   # most specific panels first, household last
   qn <- names(qinfo)[order(vapply(qinfo, function(q) q$panel == "HH", logical(1)))]
-  hhq <- names(qinfo)[vapply(qinfo, function(q) q$panel == "HH", logical(1))][1]
+  hhq <- names(qinfo)[vapply(qinfo, function(q) q$panel == "HH", logical(1))]
+  hhq <- if (length(hhq)) hhq[1] else NULL                         # no household questionnaire loaded (e.g. only wm.sav): NULL, not NA
   for (nm in setdiff(names(ds), names(qinfo))) {
     v <- meta[[nm]]$vars
     parent <- NULL
@@ -428,15 +429,17 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   }
   by_q <- Filter(Negate(is.null), lapply(stats::setNames(names(qinfo), names(qinfo)), dates_of))
   st <- NULL; fw <- NULL
-  if (!is.null(hhq)) {
-    d <- ds[[hhq]]; v <- meta[[hhq]]$vars; i <- match(d$day, v)
-    hh <- read_any_cols(file.path(data_dir, meta[[hhq]]$file), v[i:(i + 2)])
+  dq <- hhq %||% names(qinfo)[1]                                  # fieldwork dates: household questionnaire, else the first questionnaire loaded
+  i <- if (!is.null(dq)) match(ds[[dq]]$day, meta[[dq]]$vars) else NA_integer_
+  if (length(i) == 1 && !is.na(i) && i + 2 <= length(meta[[dq]]$vars)) {
+    v <- meta[[dq]]$vars
+    hh <- read_any_cols(file.path(data_dir, meta[[dq]]$file), v[i:(i + 2)])
     dd <- as.Date(sprintf("%04d-%02d-%02d", as.integer(hh[[3]]), as.integer(hh[[2]]), as.integer(hh[[1]])), optional = TRUE)
     if (any(!is.na(dd))) {
       first <- min(dd, na.rm = TRUE); last <- max(dd, na.rm = TRUE)
       st <- format(max(first, last - 20))                       # default: the last 21 days of fieldwork
       fw <- list(first = format(first), last = format(last), days = as.integer(last - first) + 1L,
-                 interviews = sum(!is.na(dd)), source = meta[[hhq]]$file, by_questionnaire = by_q)
+                 interviews = sum(!is.na(dd)), source = meta[[dq]]$file, by_questionnaire = by_q)
     }
   }
   cfg <- list(

@@ -79,3 +79,13 @@ test_that("scorecard, plan and report work without a flag analysis (descriptive 
   expect_true(file.exists(file.path(dir, "out", "IPM_report.docx")))
   expect_true(file.exists(file.path(dir, "out", "data", "fl.csv")))
 })
+
+test_that("a single individual questionnaire without the household file is auto-configured (no 'argument is of length zero')", {
+  dir <- add_synth_fs(make_synth())
+  file.remove(file.path(dir, c("hh.sav", "hl.sav")))
+  cfg <- mics_autoconfig(dir, "Only 5-17")
+  expect_equal(names(cfg$datasets), "fs")
+  expect_null(cfg$datasets$fs$parent)
+  expect_equal(cfg$fieldwork$source, "fs.sav")
+  expect_false(is.null(cfg$period$start))
+})

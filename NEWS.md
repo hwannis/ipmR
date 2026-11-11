@@ -8,6 +8,7 @@ Work on the dev branch since 0.6.0 (BACKLOG.md items in brackets).
 
 **Other**
 * Fix: the report and the rule-based plan failed when the flag analysis was not part of the run (#34).
+* Fix: loading only an individual questionnaire (e.g. wm.sav) without the household file stopped with "argument is of length zero"; the fieldwork dates are then taken from that questionnaire (#35).
 
 # ipmR 0.6.0
 

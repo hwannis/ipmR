@@ -68,4 +68,5 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 31 | The app does not show its version: add "ipmR x.y.z" to the header or footer so users can check which release the server runs. | HW | done (0.6.0) |
 | 32 | The app does not start when no AI connection is configured on the server ("attempt to set an attribute on NULL"); since 0.4.0. | CL | done (0.6.0) |
 | 33 | Flag settings check: "RHS of == is length 0" under the module table when no module is selected (req(length(x)) does not stop on 0; same pattern in 4 other places). | HW | done (0.6.0) |
+| 35 | Loading only an individual questionnaire (e.g. wm.sav, Madagascar MICS6) without the household file stops with "argument is of length zero" (no household questionnaire was taken as NA); fieldwork dates now come from the questionnaire loaded. | HW | done (dev) |
 | 34 | The report and the rule-based plan fail ("object 'rate' not found", "argument is of length zero") when the flag analysis is not part of the run. | CL (FL test on Somalia data) | done (dev) |
