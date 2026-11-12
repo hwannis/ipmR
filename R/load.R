@@ -103,7 +103,17 @@ make_date <- function(x, d) {
   dd <- suppressWarnings(as.integer(x[[d$day]])); mm <- suppressWarnings(as.integer(x[[m]])); yy <- suppressWarnings(as.integer(x[[y]]))
   out <- as.IDate(rep(NA_integer_, nrow(x)))
   ok <- !is.na(dd) & !is.na(mm) & !is.na(yy)
-  out[ok] <- as.IDate(sprintf("%04d-%02d-%02d", yy[ok], mm[ok], dd[ok]), optional = TRUE)
+  out[ok] <- ymd_date(yy[ok], mm[ok], dd[ok])
+  out
+}
+
+# date from year, month, day, element by element: an impossible date (31 Feb) or a missing part gives NA for that record only
+# (as.IDate(<character>) takes the format from the first element: one bad first date blanked every date of the dataset)
+ymd_date <- function(y, m, d) {
+  y <- suppressWarnings(as.integer(y)); m <- suppressWarnings(as.integer(m)); d <- suppressWarnings(as.integer(d))
+  ok <- !is.na(y) & !is.na(m) & !is.na(d) & m >= 1 & m <= 12 & d >= 1 & d <= 31 & y > 1900 & y < 2200
+  out <- as.IDate(rep(NA_integer_, length(y)))
+  if (any(ok)) out[ok] <- as.IDate(as.Date(ISOdate(y[ok], m[ok], d[ok])))
   out
 }
 
@@ -157,8 +167,8 @@ ipm_prepare <- function(data, cfg, quiet = FALSE, inplace = FALSE) {
     if (!is.null(d$parent)) {
       p <- out[[d$parent]]
       if (is.null(p)) { if (!quiet) message(nm, ": parent '", d$parent, "' unavailable - excluded"); next }
-      pk <- unique(p[, c(d$keys, "interv", "doi", if ("result" %in% names(p)) "result"), with = FALSE], by = d$keys)
-      setnames(pk, c("interv", "doi"), c(".p_interv", ".p_doi"))
+      pk <- unique(p[, c(d$keys, "interv", "doi", "team", if ("result" %in% names(p)) "result"), with = FALSE], by = d$keys)
+      setnames(pk, c("interv", "doi", "team"), c(".p_interv", ".p_doi", ".p_team"))
       if ("result" %in% names(pk)) setnames(pk, "result", "presult")
       for (k in d$keys) if (!identical(class(x[[k]]), class(pk[[k]]))) { set(x, j = k, value = as.numeric(x[[k]])); set(pk, j = k, value = as.numeric(pk[[k]])) }
       orig_names <- copy(names(x))
@@ -177,28 +187,32 @@ ipm_prepare <- function(data, cfg, quiet = FALSE, inplace = FALSE) {
       if (!is.numeric(x[[d$interviewer]])) stop(nm, ": interviewer variable must be numeric")
       x[, interv := as.numeric(get(d$interviewer))]
     } else x[, interv := .p_interv]
-    if (all(is.na(x$interv))) stop(nm, ": interviewer number is empty")
-    dropc <- intersect(c(".p_doi", ".p_interv"), names(x)); if (length(dropc)) x[, (dropc) := NULL]
+    if (!nrow(x) || all(is.na(x$interv))) { if (!quiet) message(nm, ": no records or no interviewer number - excluded"); next }
     # result
     if (!is.null(d$result)) {
-      if (!is.numeric(x[[d$result]]) || all(is.na(x[[d$result]]))) stop(nm, ": result variable must be numeric and not empty")
+      if (!is.numeric(x[[d$result]])) stop(nm, ": result variable must be numeric")
+      if (all(is.na(x[[d$result]]))) { if (!quiet) message(nm, ": result variable is empty - excluded"); next }
       x[, result := as.numeric(get(d$result))]
     }
     stdates[[nm]] <- week_start(x$doi, o$woi_min_daily)
     # team
     sup <- if (!is.null(cfg$teams$variable) && cfg$teams$variable %in% names(x)) as.numeric(x[[cfg$teams$variable]]) else NULL
     x[, team := assign_teams(interv, sup, cfg, team_levels)]
+    if (".p_team" %in% names(x)) x[is.na(team) & !is.na(.p_team), team := .p_team]   # linked file without the team variable: team of the parent record
+    dropc <- intersect(c(".p_doi", ".p_interv", ".p_team"), names(x)); if (length(dropc)) x[, (dropc) := NULL]
     if (!is.null(d$supervisor) && d$supervisor %in% names(x) && is.numeric(x[[d$supervisor]]))
       supcodes[[nm]] <- x[!is.na(team) & !is.na(get(d$supervisor)), .(team, sup = as.numeric(get(d$supervisor)))]
     out[[nm]] <- x
   }
-  # week of interview: int((doi - start)/7) + 1, missing if <= 0 (Stata truncation kept)
+  # week of interview: floor((doi - start)/7) + 1, missing if <= 0 (records before week 1 are not counted in it;
+  # Stata truncates towards zero, so up to 6 days before week 1 fell in week 1 - kept with stata_compat)
   anchor <- if (o$woi_anchor == "survey") {
     q <- intersect(c("hh", names(out)), names(out))[1]; stdates[[q]]
   } else NULL
   for (nm in names(out)) {
     s <- anchor %||% stdates[[nm]]
-    out[[nm]][, woi := as.integer(trunc(as.numeric(doi - s) / 7) + 1)]
+    rnd <- if (isTRUE(o$stata_compat)) trunc else floor
+    out[[nm]][, woi := as.integer(rnd(as.numeric(doi - s) / 7) + 1)]
     out[[nm]][woi <= 0, woi := NA_integer_]
   }
   # team labels

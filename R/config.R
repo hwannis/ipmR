@@ -24,12 +24,14 @@ ipm_defaults <- function() {
     woi_min_daily = 20,    # first day with >= this many records defines week 1
     # --- R-port options (defaults reproduce Stata unless a clear bug) ---
     woi_anchor           = "dataset", # "dataset" (Stata) or "survey" (one week-1 for all datasets)
-    test_min_nonmissing  = FALSE,     # TRUE: min-obs checks use non-missing obs on the tested variable
+    test_min_nonmissing  = TRUE,      # min-obs checks use the answers to the tested question, not the records (Stata: records)
     exclude_height_codes = TRUE,      # drop heights >= 900 (e.g. 999.6 not-measured codes) from heaping
     filter_parent_result = TRUE,      # linked datasets keep only records whose parent interview is completed
     drop_long_strings    = FALSE,     # TRUE: drop text variables longer than 1 character on load (names; saves memory, protects privacy)
     fig_dpi              = 150,
-    period_weeks_only    = FALSE      # TRUE: descriptive charts (outputs 2-8) show only the weeks of the period of analysis
+    period_weeks_only    = FALSE,     # TRUE: descriptive charts (outputs 2-8) show only the weeks of the period of analysis
+    stata_compat         = FALSE      # TRUE: reproduce the Stata IPM numbers - period of start + days (one day more), records up to
+                                      #   6 days before week 1 counted in week 1 (truncation), min. obs on records (overrides test_min_nonmissing)
   )
 }
 
@@ -61,6 +63,7 @@ hhm_group_defs <- list(
 
 normalise_config <- function(cfg) {
   cfg$options <- utils::modifyList(ipm_defaults(), cfg$options %||% list())
+  if (isTRUE(cfg$options$stata_compat)) cfg$options$test_min_nonmissing <- FALSE      # Stata: min. obs counted on records
   outs <- stats::setNames(as.list(rep(FALSE, length(ipm_output_names))), names(ipm_output_names))
   cfg$outputs <- utils::modifyList(outs, cfg$outputs %||% list())
   cfg$hhm_groups <- unlist(cfg$hhm_groups %||% names(hhm_group_defs))
@@ -148,10 +151,20 @@ validate_config <- function(cfg, data = NULL) {
   add <- function(level, where, msg) iss[[length(iss) + 1]] <<- data.frame(level = level, where = where, message = msg)
   if (is.null(cfg$data_dir) || !dir.exists(cfg$data_dir)) add("error", "main", "data_dir does not exist")
   if (!length(cfg$datasets)) add("error", "datasets", "no datasets configured")
-  if (is.null(cfg$teams$ranges) && is.null(cfg$teams$variable)) add("error", "teams", "define teams: ranges or variable")
-  if (!is.null(cfg$teams$ranges)) {
-    bad <- !grepl("^\\s*[0-9]+\\s*-\\s*[0-9]+\\s*$", cfg$teams$ranges) & nzchar(trimws(cfg$teams$ranges))
-    if (any(bad)) add("error", "teams", paste("invalid ranges:", paste(cfg$teams$ranges[bad], collapse = ", ")))
+  rg <- trimws(unlist(cfg$teams$ranges)); rg <- rg[nzchar(rg)]
+  if (!length(rg) && is.null(cfg$teams$variable)) add("error", "teams", "define teams: interviewer ranges or a team/supervisor variable")
+  if (length(rg)) {
+    bad <- !grepl("^[0-9]+\\s*-\\s*[0-9]+$", rg)
+    if (any(bad)) add("error", "teams", paste("invalid ranges:", paste(rg[bad], collapse = ", ")))
+    ok <- rg[!bad]
+    if (length(ok)) {
+      ab <- do.call(rbind, lapply(strsplit(gsub("\\s", "", ok), "-", fixed = TRUE), as.numeric))
+      rv <- ab[, 1] > ab[, 2]
+      if (any(rv)) add("error", "teams", paste("ranges with the first number larger than the second:", paste(ok[rv], collapse = ", ")))
+      o <- order(ab[, 1]); s <- ab[o, , drop = FALSE]; ov <- which(s[-1, 1] <= s[-nrow(s), 2])
+      if (length(ov)) add("error", "teams", paste("overlapping ranges (an interviewer would be in two teams):",
+                                                  paste(sprintf("%s and %s", ok[o][ov], ok[o][ov + 1]), collapse = "; ")))
+    }
   }
   needs_period <- isTRUE(cfg$outputs$flaganal) || isTRUE(cfg$outputs$ant_oor)
   if (needs_period) {
@@ -167,7 +180,7 @@ validate_config <- function(cfg, data = NULL) {
     x <- data$raw[[ds]]
     if (!v %in% names(x)) add("error", ds, sprintf("%s variable '%s' not found", what, v))
     else if (numeric && !is.numeric(x[[v]])) add("error", ds, sprintf("%s variable '%s' must be numeric", what, v))
-    else if (all(is.na(x[[v]]))) add("error", ds, sprintf("%s variable '%s' is empty", what, v))
+    else if (all(is.na(x[[v]]))) add("warning", ds, sprintf("%s variable '%s' is empty (no data yet?) - outputs that need it are skipped", what, v))
   }
   for (ds in names(cfg$datasets)) {
     d <- cfg$datasets[[ds]]
@@ -424,7 +437,7 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
     if (is.na(i) || i + 2 > length(v)) return(NULL)
     x <- tryCatch(read_any_cols(file.path(data_dir, meta[[nm]]$file), v[i:(i + 2)]), error = function(e) NULL)
     if (is.null(x)) return(NULL)
-    dd <- as.Date(sprintf("%04d-%02d-%02d", as.integer(x[[3]]), as.integer(x[[2]]), as.integer(x[[1]])), optional = TRUE)
+    dd <- as.Date(ymd_date(x[[3]], x[[2]], x[[1]]))
     if (!any(!is.na(dd))) NULL else list(first = format(min(dd, na.rm = TRUE)), last = format(max(dd, na.rm = TRUE)), interviews = sum(!is.na(dd)))
   }
   by_q <- Filter(Negate(is.null), lapply(stats::setNames(names(qinfo), names(qinfo)), dates_of))
@@ -434,7 +447,7 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   if (length(i) == 1 && !is.na(i) && i + 2 <= length(meta[[dq]]$vars)) {
     v <- meta[[dq]]$vars
     hh <- read_any_cols(file.path(data_dir, meta[[dq]]$file), v[i:(i + 2)])
-    dd <- as.Date(sprintf("%04d-%02d-%02d", as.integer(hh[[3]]), as.integer(hh[[2]]), as.integer(hh[[1]])), optional = TRUE)
+    dd <- as.Date(ymd_date(hh[[3]], hh[[2]], hh[[1]]))
     if (any(!is.na(dd))) {
       first <- min(dd, na.rm = TRUE); last <- max(dd, na.rm = TRUE)
       st <- format(max(first, last - 20))                       # default: the last 21 days of fieldwork

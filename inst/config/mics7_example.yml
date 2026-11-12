@@ -328,7 +328,7 @@ options:
   outrange: 1.0
   woi_min_daily: 20.0
   woi_anchor: dataset
-  test_min_nonmissing: no
+  test_min_nonmissing: yes
   exclude_height_codes: yes
   filter_parent_result: yes
   fig_dpi: 150.0

@@ -205,13 +205,14 @@ ipm_ui <- page_navbar(
       div(actionButton("fc_run", "Check flag settings", class = "btn-primary"), downloadButton("fc_dl", "Download the full list (CSV)", class = "btn-sm")),
       uiOutput("fc_problems"), DT::DTOutput("fc_modules"), DT::DTOutput("fc_vars")),
     card(card_header("Advanced parameters"),
-      layout_columns(col_widths = c(2, 2, 2, 2, 2, 2),
+      layout_columns(col_widths = c(2, 2, 2, 2, 2, 2, 12),
         numericInput("o_levelsig", "Significance level", 0.001, 0, 1, 0.0005),
         numericInput("o_test_min", "Min. obs per interviewer", 5, 1),
         numericInput("o_max_uniq", "Max. distinct values (categorical)", 34, 2),
         numericInput("o_highly_flag", "Highly flagged (%)", 10, 1),
         selectInput("o_woi_anchor", "Week 1 anchor", c("Per dataset (IPM)" = "dataset", "Survey-wide (hh)" = "survey")),
-        checkboxInput("o_test_min_nonmissing", "Min. obs counted on answered cases", FALSE))),
+        checkboxInput("o_test_min_nonmissing", "Min. obs counted on answered cases", TRUE),
+        checkboxInput("o_stata_compat", "Stata-compatible numbers (period of start + days, i.e. one day more; records up to 6 days before week 1 counted in week 1; min. obs on records)", FALSE))),
     div(style = "text-align:right", actionButton("go6", HTML("Next: run &rarr;"), class = "btn-primary"))),
 
   # ---------------- 6. RUN ----------------
@@ -461,7 +462,8 @@ ipm_server <- function(input, output, session) {
     o <- cfg$options
     updateNumericInput(session, "o_levelsig", value = o$levelsig); updateNumericInput(session, "o_test_min", value = o$test_min)
     updateNumericInput(session, "o_max_uniq", value = o$max_uniq); updateNumericInput(session, "o_highly_flag", value = o$highly_flag)
-    updateSelectInput(session, "o_woi_anchor", selected = o$woi_anchor); updateCheckboxInput(session, "o_test_min_nonmissing", value = o$test_min_nonmissing)
+    updateSelectInput(session, "o_woi_anchor", selected = o$woi_anchor); updateCheckboxInput(session, "o_test_min_nonmissing", value = isTRUE(o$test_min_nonmissing))
+    updateCheckboxInput(session, "o_stata_compat", value = isTRUE(o$stata_compat))
     updateCheckboxInput(session, "o_period_weeks_only", value = isTRUE(o$period_weeks_only))
   }
   observeEvent(input$cfg_upload, {
@@ -650,7 +652,7 @@ ipm_server <- function(input, output, session) {
       e <- list(dataset = ds_k); for (f in flds) e[[f]] <- nz(g(paste0("ex_", k, "_", f), cfg$extras[[k]][[f]]))
       cfg$extras[[k]] <- e
     }
-    for (k in c("levelsig", "test_min", "max_uniq", "highly_flag", "woi_anchor", "test_min_nonmissing", "period_weeks_only")) cfg$options[[k]] <- g(paste0("o_", k), cfg$options[[k]])
+    for (k in c("levelsig", "test_min", "max_uniq", "highly_flag", "woi_anchor", "test_min_nonmissing", "stata_compat", "period_weeks_only")) cfg$options[[k]] <- g(paste0("o_", k), cfg$options[[k]])
     cfg
   }
   output$cfg_download <- downloadHandler(filename = function() "ipm_settings.yml", content = function(f) {

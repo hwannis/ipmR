@@ -278,7 +278,8 @@ out_ant_heap <- function(p) {
 }
 
 period_bounds <- function(cfg) {
-  st <- as.IDate(cfg$period$start); en <- st + as.integer(cfg$period$days %||% 21)
+  # the period covers `days` days including the start day (Stata: start + days, one day more)
+  st <- as.IDate(cfg$period$start); en <- st + as.integer(cfg$period$days %||% 21) - if (isTRUE(cfg$options$stata_compat)) 0L else 1L
   list(start = st, end = en, label = sprintf("%s-%s", format(st, "%d%b%Y"), format(en, "%d%b%Y")))
 }
 

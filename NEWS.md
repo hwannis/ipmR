@@ -6,6 +6,14 @@ Work on the dev branch since 0.6.0 (BACKLOG.md items in brackets).
 * New output `fl`: checks of the foundational learning assessment of the 5-17 questionnaire, per interviewer and week - FL completed (FL28), median duration from the start with the child (FL2) to the end of the interview, children who do not want to read (no at FL10A/B and not willing to try at FL10C), assessments stopped at the reading practice (FL14/FL15/FL17), reading story reached (FL19), numeracy stopped after number reading (FL23 check: skip to FL27) (#29). Checked against the Somalia 5-17 questionnaire: children 10-14 attending school go straight to the story without the practice (FL12), which is expected.
 * Interviewers far from team-mates (or with very short assessments) appear in the summary and the scorecard, with the action "observe the interviewer administering the assessment"; the variables are found automatically for MICS7 and can be changed on the Settings page (Variables for specific outputs).
 
+**Correctness (review of Nov 2026)** - numbers change slightly; the setting `stata_compat` (Flag settings > "Stata-compatible numbers") reproduces the Stata IPM where its behaviour differs
+* Interviewers are tested on their answers to each question, not on their number of records (`test_min_nonmissing` now TRUE by default): no more flags from 1-4 answers, and flag rates are no longer diluted by near-empty tests. Somalia 21 Oct: 52,808 tests instead of 68,111, 3,726 flags instead of 3,809, flag rate 7.1% instead of 5.6%, same priority teams (#37).
+* The period of analysis covers exactly the number of days asked (#38); records before week 1 are no longer counted in week 1 (#39).
+* One impossible date no longer blanks every date of a dataset (#36).
+* Linked files keep their team when teams are defined by a supervisor variable (#40).
+* An empty file or variable is a warning and the dataset is skipped, instead of stopping the run (#41).
+* Missing, reversed or overlapping team ranges are reported as errors (#42).
+
 **Other**
 * Fix: the report and the rule-based plan failed when the flag analysis was not part of the run (#34).
 * Fix: loading only an individual questionnaire (e.g. wm.sav) without the household file stopped with "argument is of length zero"; the fieldwork dates are then taken from that questionnaire (#35).
