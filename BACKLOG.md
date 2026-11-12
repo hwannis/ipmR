@@ -77,9 +77,9 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 42 | Missing, reversed or overlapping team ranges were accepted without error. | CL (review) | done (0.6.1) |
 | 35 | Loading only an individual questionnaire (e.g. wm.sav, Madagascar MICS6) without the household file stops with "argument is of length zero" (no household questionnaire was taken as NA); fieldwork dates now come from the questionnaire loaded. | HW | done (0.6.1) |
 | 34 | The report and the rule-based plan fail ("object 'rate' not found", "argument is of length zero") when the flag analysis is not part of the run. | CL (FL test on Somalia data) | done (0.6.1) |
-| 43 | The app header and reports showed ipmR 0.6.0 in release 0.6.1 (version written by hand in R/report.R); now checked against DESCRIPTION by a test. | HW | done (dev) |
-| 44 | Three different ways to load the data (folder, files/zip, path) are confusing: one drop box that accepts a folder, files or a .zip, dropped or chosen. | HW | done (dev) |
-| 45 | Flag tests took 60 s on Somalia (one test at a time); vectorised engine with exact closed-form chi-square, identical results: 5 s. | CL (review Nov 2026) | done (dev) |
-| 46 | Stored graphs kept the whole data of the function that built them (1.1 GB of outputs on Somalia, 8 GB peak when writing the report); environments slimmed, images unchanged: 0.26 GB. | CL (review) | done (dev) |
-| 47 | Flag tables documents took about 4 minutes (officer adds tables one by one, slower with each); written as Word XML in one step: 8 s. Same for the large tables of the main report. | CL (review) | done (dev) |
-| 48 | Use several cores where available (graphs of the report), with automatic worker count and a fallback to one process. | HW | done (dev) |
+| 43 | The app header and reports showed ipmR 0.6.0 in release 0.6.1 (version written by hand in R/report.R); now checked against DESCRIPTION by a test. | HW | done (0.6.2) |
+| 44 | Three different ways to load the data (folder, files/zip, path) are confusing: one drop box that accepts a folder, files or a .zip, dropped or chosen. | HW | done (0.6.2) |
+| 45 | Flag tests took 60 s on Somalia (one test at a time); vectorised engine with exact closed-form chi-square, identical results: 5 s. | CL (review Nov 2026) | done (0.6.2) |
+| 46 | Stored graphs kept the whole data of the function that built them (1.1 GB of outputs on Somalia, 8 GB peak when writing the report); environments slimmed, images unchanged: 0.26 GB. | CL (review) | done (0.6.2) |
+| 47 | Flag tables documents took about 4 minutes (officer adds tables one by one, slower with each); written as Word XML in one step: 8 s. Same for the large tables of the main report. | CL (review) | done (0.6.2) |
+| 48 | Use several cores where available (graphs of the report), with automatic worker count and a fallback to one process. | HW | done (0.6.2) |
