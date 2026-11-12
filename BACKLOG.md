@@ -83,3 +83,9 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 46 | Stored graphs kept the whole data of the function that built them (1.1 GB of outputs on Somalia, 8 GB peak when writing the report); environments slimmed, images unchanged: 0.26 GB. | CL (review) | done (0.6.2) |
 | 47 | Flag tables documents took about 4 minutes (officer adds tables one by one, slower with each); written as Word XML in one step: 8 s. Same for the large tables of the main report. | CL (review) | done (0.6.2) |
 | 48 | Use several cores where available (graphs of the report), with automatic worker count and a fallback to one process. | HW | done (0.6.2) |
+| 49 | Summary and scorecard used two separate rule sets and could contradict each other; one engine now feeds summary, scorecard, plan, AI and report. | CL (review Nov 2026) | done (dev) |
+| 50 | Findings were not precise or actionable enough (long text, many signs); each issue now has a level (questionnaire / team / interviewer), a one-line headline with numbers, and a short action with owner and timing. | HW | done (dev) |
+| 51 | All questions flagged in most teams were 'high' and inflated team and interviewer flag counts; now questionnaire problems, counted once and left out of team/interviewer comparisons. | CL (review) | done (dev) |
+| 52 | The within-team flag test cannot see a whole team doing the same thing wrong; added team vs rest-of-survey comparison (interview length, completion, 'don't know', household listing, FL). | HW | done (dev) |
+| 53 | Many small signs added up to High priority (T2 Somalia: 13 signs, 1 high); one issue per interviewer and area, none when the whole team has the same issue. | CL (review) | done (dev) |
+| 54 | Low priority shown in green (reads as 'fine'); now grey. Priority rule rewritten and explained in app, report and AI evidence. | CL (review) | done (dev) |

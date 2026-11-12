@@ -54,8 +54,11 @@ test_that("FL checks are auto-configured, computed and find the planted intervie
   expect_equal(pe[which.max(v), interv], 23)
   sc <- ipm_scorecard(res)
   s <- sc$signals[interv == 23]
-  expect_true(all(c("fl_practice_exit", "fl_story", "fl_minutes") %in% s$type))
-  expect_false(any(grepl("^fl_", sc$signals[interv != 23]$type)))
+  expect_equal(sum(s$area == "fl"), 1)                                     # the FL checks of one interviewer are one issue
+  ev <- s[area == "fl"]$evidence
+  expect_match(ev, "reading practice"); expect_match(ev, "reading story"); expect_match(ev, "minutes per FL assessment")
+  expect_equal(s[area == "fl"]$type, "fl_assessment")
+  expect_false(any(sc$signals[level == "interviewer" & interv != 23]$area == "fl"))
   sm <- ipm_summary(res)
   expect_true(any(grepl("reading practice", unlist(lapply(sm$sections, `[[`, "bullets")))))
 })

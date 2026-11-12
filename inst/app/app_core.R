@@ -103,7 +103,7 @@ AI_CHOICES <- c(if (length(AI_CONNS)) stats::setNames(names(AI_CONNS), vapply(AI
                 if (AI_CUSTOM) c("My own connection (this session only)" = "custom"))
 if (!length(AI_CHOICES)) AI_CHOICES <- c("No AI model configured on this server" = "")
 fmt_i <- function(x) format(x, scientific = FALSE, trim = TRUE)
-prio_col <- c(High = "#E2231A", Medium = "#F26A21", Low = "#00833D")
+prio_col <- c(High = "#E2231A", Medium = "#F26A21", Low = "#8A8A8A")   # Low = grey: nothing major found, not "fine"
 md_html <- function(x) {
   x <- gsub("<", "&lt;", x %||% "", fixed = TRUE)                     # model output is never trusted as HTML
   if (requireNamespace("commonmark", quietly = TRUE)) HTML(commonmark::markdown_html(x, extensions = TRUE)) else tags$pre(style = "white-space:pre-wrap", x)
@@ -128,8 +128,8 @@ bg_child <- function(what, args, pf, src, libs) {
   switch(what,
     run = {
       res <- run_ipm(args$cfg, write = FALSE, progress = prog, keep_data = FALSE)
-      prog("Writing summary"); res$summary <- tryCatch(ipm_summary(res), error = function(e) NULL)
       prog("Team scorecard"); sc <- tryCatch(ipm_scorecard(res), error = function(e) conditionMessage(e))
+      prog("Writing summary"); res$summary <- tryCatch(if (is.list(sc)) ipm_summary(res, sc) else ipm_summary(res), error = function(e) NULL)
       list(res = res, sc = sc) },
     report = {
       unlink(args$dir, recursive = TRUE)
@@ -305,7 +305,7 @@ ipm_ui <- page_navbar(
                 "Start with the High-priority teams. Click a team in the first table to filter the list of warning signs. The same evidence is used by the action plan (next tab)."),
         uiOutput("sc_kpis"),
         tags$h5(class = "sch", "Teams (highest priority first)"), DT::DTOutput("sc_teams"),
-        div(class = "howto", tags$b("How to read: "), "Points = 3 per high-severity sign and 1 per medium sign. High priority = 9 points or more, or a team-wide excess of flags (at least 1.5 times the survey rate, binomial p < 0.01); Medium = 3 to 8 points. 'x survey rate' compares the team's % of flagged tests with the survey as a whole (1 = average)."),
+        div(class = "howto", tags$b("How to read: "), "Each issue is a questionnaire problem (question or module flagged in most teams - not counted against teams), a whole-team issue (the team differs from the other teams) or an interviewer issue (one interviewer differs from team-mates). High priority = a team-wide excess of flags (at least 1.5 times the survey rate, binomial p < 0.01, questionnaire problems left out) or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues. Points (3 per high, 1 per medium) only order the teams. 'x survey rate' compares the team's % of flagged tests with the survey as a whole (1 = average)."),
         tags$h5(class = "sch", "Warning signs with evidence and standard action"), DT::DTOutput("sc_signals"),
         tags$h5(class = "sch", "Interviewers"), DT::DTOutput("sc_interv")),
       nav_panel("Action plan (AI)", value = "ai",
@@ -436,8 +436,9 @@ ipm_server <- function(input, output, session) {
   bg_child_local <- function(what, args, prog) {               # same jobs, in this process
     switch(what,
       run = { res <- run_ipm(args$cfg, write = FALSE, progress = prog, keep_data = FALSE)
-              prog("Writing summary"); res$summary <- tryCatch(ipm_summary(res), error = function(e) NULL)
-              prog("Team scorecard"); list(res = res, sc = tryCatch(ipm_scorecard(res), error = function(e) conditionMessage(e))) },
+              prog("Team scorecard"); sc <- tryCatch(ipm_scorecard(res), error = function(e) conditionMessage(e))
+              prog("Writing summary"); res$summary <- tryCatch(if (is.list(sc)) ipm_summary(res, sc) else ipm_summary(res), error = function(e) NULL)
+              list(res = res, sc = sc) },
       report = { unlink(args$dir, recursive = TRUE); rep <- ipm_report(args$res, args$dir, progress = prog)
                  prog("Zipping all results"); unlink(args$zip); old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
                  utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq"); list(report = rep, zip = args$zip) },
@@ -785,7 +786,7 @@ ipm_server <- function(input, output, session) {
   output$sc_kpis <- renderUI({ sc <- rv$sc; req(sc)
     k <- function(v, l, col = cyan) div(style = "display:inline-block; margin-right:40px", div(class = "bignum", style = paste0("color:", col), v), div(class = "small-note", l))
     div(k(sum(sc$teams$priority == "High"), "teams of high priority", prio_col[["High"]]), k(sum(sc$teams$priority == "Medium"), "teams of medium priority", prio_col[["Medium"]]),
-        k(nrow(sc$signals[level == "survey"]), "survey-wide question/module problems"), k(nrow(sc$signals[level == "interviewer"]), "interviewer warning signs"))
+        k(nrow(sc$signals[level == "survey"]), "questionnaire problems"), k(nrow(sc$signals[level == "team"]), "whole-team issues"), k(nrow(sc$signals[level == "interviewer"]), "interviewer issues"))
   })
   sc_team_tab <- reactive({ sc <- rv$sc; req(sc)
     sc$teams[, .(Team = team_label, Priority = priority, Points = points, Signs = signals, `% flagged` = round(rate, 1), `x survey rate` = round(ratio, 1),
@@ -797,7 +798,7 @@ ipm_server <- function(input, output, session) {
   output$sc_signals <- DT::renderDT({ sc <- rv$sc; req(sc)
     s <- sc$signals; i <- input$sc_teams_rows_selected
     if (length(i)) s <- s[team_label %in% sc_team_tab()$Team[i]]
-    DT::datatable(s[, .(Level = level, Team = team_label, Interviewer = ifelse(is.na(interv), "", fmt_i(interv)), Sign = gsub("_", " ", type), Severity = severity,
+    DT::datatable(s[, .(Level = c(survey = "Questionnaire", team = "Team", interviewer = "Interviewer")[level], Team = team_label, Interviewer = ifelse(is.na(interv), "", fmt_i(interv)), Sign = gsub("_", " ", type), Severity = severity,
                         Module = ifelse(is.na(module), "", paste(dataset, module)), Evidence = evidence, Action = action, Owner = owner, When = timing)],
                   rownames = FALSE, filter = "top", fillContainer = FALSE, options = list(pageLength = 15, scrollX = TRUE)) |>
       DT::formatStyle("Severity", color = DT::styleEqual(c("high", "medium"), c(prio_col[["High"]], prio_col[["Medium"]])), fontWeight = "bold")

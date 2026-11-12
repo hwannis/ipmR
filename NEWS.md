@@ -1,5 +1,13 @@
 # ipmR (development version)
 
+**One rule engine (phase 3)**
+* The summary, the team scorecard, the rule-based action plan, the AI evidence and the report now all read the same list of issues (ipm_scorecard()), so they can no longer contradict each other (#49).
+* Every issue is a questionnaire problem (a question or module flagged in most teams), a whole-team issue or an interviewer issue, with a one-line headline, the numbers, a short action, owner and timing (#50).
+* Questions flagged in most teams are questionnaire problems: listed once, and left out when teams and interviewers are compared (Somalia: 88 questions; flag rate without them 4.0% instead of 7.1%) (#51).
+* New team vs rest-of-survey comparison, for problems the within-team flag test cannot see (the whole team doing the same thing): interview length, completion, share of "don't know" answers, household members listed, FL assessment. Reported only when most of the team's interviewers are on the same side and the difference is large enough to matter (e.g. 5+ minutes, 3+ points of "don't know") (#52).
+* One issue per interviewer and area (e.g. the 6 FL checks, or short interviews in several questionnaires); no interviewer issue when the whole team has the same one (#53).
+* Team priority: High = team-wide excess of flags or 2+ high-severity issues; Medium = 1 high-severity issue or 3+ issues; Low otherwise. Low is shown in grey, not green (#54).
+
 # ipmR 0.6.2
 
 **Speed (phase 2)** - Somalia (10 questionnaires, 52,808 tests, 2,453 flag tables): full run with report from about 6-7 minutes to about 1 minute; peak memory from 8 GB to under 1 GB. Same numbers as before (all tests, flags, readings, flag tables and the scorecard are identical).

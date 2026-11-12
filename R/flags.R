@@ -146,6 +146,16 @@ flag_crosstab <- function(team_rows, var, lab) {
   cbind(Value = rownames(df), df, stringsAsFactors = FALSE, row.names = NULL)
 }
 
+# Codes of the "don't know" answer of a question, from its value labels (MICS: 8, 98, 998... labelled DK).
+# Code 8 counts only if its label says "don't know" (it can be a real category); 98, 998... always do when labelled.
+dk_codes <- function(lab) {
+  if (is.null(lab) || !length(lab)) return(numeric())
+  v <- suppressWarnings(as.numeric(unname(lab))); nm <- ascii_fold(names(lab))
+  is_dk_txt <- grepl("(^|[^a-z])(dk|nsp|ns)([^a-z]|$)|don'?t know|do not know|ne sait|no sabe|nao sabe|garanayo|haijui|sijui|bilmiyor", nm)
+  keep <- !is.na(v) & ((v %in% c(98, 998, 9998)) | (v == 8 & is_dk_txt))
+  unique(v[keep])
+}
+
 # All tests of a block of questions in one grouped pass.
 # L: long table (vid, team, interv, val); cats: var_cat of each vid in `vids`; base_cnt: all-row counts per (team, interv).
 # Returns (vid, team, interv, p) for every eligible interviewer.
@@ -193,7 +203,7 @@ flag_test_block <- function(L, vids, cats, base_cnt, o) {
 #' @export
 flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, make_plots = TRUE) {
   o <- p$cfg$options; pb <- period_bounds(p$cfg)
-  tests <- list(); tables <- list(); retained <- list(); clus <- list()
+  tests <- list(); tables <- list(); retained <- list(); clus <- list(); dks <- list()
   dsl <- names(p$ds)[vapply(names(p$ds), function(n) length(p$cfg$datasets[[n]]$flag_modules) > 0, logical(1))]
   max_rows <- getOption("ipmR.flag_block_rows", 4e6)                  # bounds the memory of one block of questions
   for (dsn in dsl) {
@@ -217,6 +227,7 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
 
     # every retained question becomes rows (vid, team, interv, val) of one long table, tested in blocks
     meta <- list(); block <- list(); nrow_block <- 0; res_ds <- list()
+    n_ans <- n_dk <- numeric(length(team)); dk_seen <- character()   # "don't know" answers per record, for the team comparison
     flush <- function() {
       if (!length(block)) return()
       L <- rbindlist(block); block <<- list(); nrow_block <<- 0
@@ -234,6 +245,10 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
         meta[[vid]] <- list(vid = vid, dataset = dsn, module = mod, variable = sprintf("v%05d_%s", varorder, v), varname = v,
                             vardesc = varlab[v] %||% "", var_cat = pv$cat)
         val <- pv$val[keep]
+        if (!v %in% dk_seen && length(dkc <- dk_codes(vallab[[v]])) && is.numeric(x[[v]])) {
+          dk_seen <- c(dk_seen, v); z <- x[[v]][keep]
+          n_ans <- n_ans + !is.na(z); n_dk <- n_dk + (z %in% dkc)
+        }
         if (is.character(val)) val <- match(val, sort(unique(val)))       # one-character strings: categories -> codes
         sel <- if (pv$cat == "CA") !is.na(val) else rep(TRUE, length(val))
         block[[length(block) + 1]] <- list(vid = rep.int(vid, sum(sel)), team = team[sel], interv = interv[sel], val = as.numeric(val[sel]))
@@ -242,6 +257,8 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
       }
     }
     flush()
+    if (length(dk_seen)) dks[[dsn]] <- data.table(dataset = dsn, team = team, interv = interv, answers = n_ans, dk = n_dk)[
+      , .(questions = length(dk_seen), answers = sum(answers), dk = sum(dk)), by = .(dataset, team, interv)]
     if (!length(meta)) next
     mt <- rbindlist(meta)
     retained[[dsn]] <- mt[, .(dataset, module, variable = varname)]
@@ -270,6 +287,7 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
   }
   tests <- rbindlist(tests)
   out <- list(tests = tests, tables = tables, period = pb$label, retained = rbindlist(retained),
+              dk = if (length(dks)) rbindlist(dks) else NULL,
               clustering = if (length(clus)) rbindlist(clus)[, per_household := records / households][] else NULL)
   if (!nrow(tests)) return(out)
   tests[, flag100 := flag * 100]

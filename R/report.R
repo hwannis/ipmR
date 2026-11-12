@@ -95,7 +95,8 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   if (!is.null(cfg$period$start)) doc <- add_text(doc, sprintf("Period of analysis for anthropometry case listing and flag analysis: %s", period_bounds(cfg)$label), 9)
   # key findings
   progress("Writing report: key findings")
-  sm <- tryCatch(ipm_summary(res), error = function(e) NULL)
+  sc <- tryCatch(ipm_scorecard(res), error = function(e) NULL)                 # the one rule engine: summary, tables and plan all read it
+  sm <- tryCatch(if (!is.null(sc)) ipm_summary(res, sc) else ipm_summary(res), error = function(e) NULL)
   ht <- ipm_howto()
   allp <- list(); addp <- function(g) if (inherits(g, "ggplot")) allp[[length(allp) + 1]] <<- g
   if (!is.null(sm)) addp(sm$plots$team_module)
@@ -117,11 +118,11 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
       doc <- add_plot(doc, sm$plots$team_module, figdir, o, drawn)
       doc <- add_text(doc, paste("How to read:", ht$team_module), 8.5, TRUE)
     }
-    sc <- tryCatch(ipm_scorecard(res), error = function(e) NULL)
+    # sc computed above
     if (!is.null(sc) && nrow(sc$teams)) {
       doc <- officer::body_add_break(doc)
       doc <- add_heading(doc, "Team scorecard and priorities", 11)
-      doc <- add_text(doc, "Priority from the warning signs of each team (high-severity sign = 3 points, medium = 1; High = 9+ points or an excess of flags for the team as a whole, Medium = 3-8 points). Details in team_action_plan.docx and data/scorecard_*.csv.", 8, TRUE)
+      doc <- add_text(doc, "Priority: High = the team as a whole has an excess of flags, or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues; Low = otherwise. Questionnaire problems (questions flagged in most teams) do not count against teams. Points: high = 3, medium = 1. Details in team_action_plan.docx and data/scorecard_*.csv.", 8, TRUE)
       tb <- sc$teams[, .(Team = team_label, Priority = priority, Points = points, Signals = signals, `% flagged` = round(rate, 1), `x survey rate` = round(ratio, 1),
                          `Modules` = top_modules, `Interviewers of concern` = interviewers_of_concern)]
       tb[is.na(tb)] <- ""
@@ -190,7 +191,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
     } else if (!is.null(r$data) && nrow(r$data)) data.table::fwrite(r$data, file.path(ddir, paste0(id, ".csv")))
   }
   # scorecard and team action plan (AI plan if one was generated in the session, otherwise rule-based)
-  sc <- tryCatch(ipm_scorecard(res), error = function(e) NULL)
+  # sc computed above (same scorecard as the summary)
   if (!is.null(sc)) {
     progress("Writing team action plan")
     data.table::fwrite(sc$teams, file.path(ddir, "scorecard_teams.csv"))
