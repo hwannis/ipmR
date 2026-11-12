@@ -19,6 +19,9 @@ Imports:
     haven,
     ggplot2,
     officer,
+    zip,
+    rlang,
+    parallel,
     flextable,
     openxlsx,
     yaml,
@@ -35,6 +38,10 @@ Suggests:
     bslib,
     DT,
     ragg,
+    ps,
+    S7,
+    pkgload,
+    xml2,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 RoxygenNote: 7.3.1

@@ -30,7 +30,7 @@ run_ipm <- function(cfg, write = TRUE, progress = message, keep_data = TRUE) {
     o_ <- tryCatch(if (id == "flaganal") flag_analysis(p, progress = progress) else fns[[id]](p),
                    error = function(e) { progress(sprintf("WARNING: %s skipped (%s)", ipm_output_names[[id]], conditionMessage(e)))
                      issues <<- rbind(issues, data.frame(level = "warning", where = id, message = paste("Output skipped:", conditionMessage(e)))); NULL })
-    if (!is.null(o_)) outputs[[id]] <- o_
+    if (!is.null(o_)) outputs[[id]] <- slim_plots(o_)                # charts without a hidden copy of the data
   }
   dsum <- rbindlist(lapply(names(p$ds), function(n) { x <- p$ds[[n]]
     data.table(dataset = n, records = nrow(x), first_day = format(min(x$doi, na.rm = TRUE)), last_day = format(max(x$doi, na.rm = TRUE)),

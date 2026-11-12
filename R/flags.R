@@ -146,6 +146,44 @@ flag_crosstab <- function(team_rows, var, lab) {
   cbind(Value = rownames(df), df, stringsAsFactors = FALSE, row.names = NULL)
 }
 
+# All tests of a block of questions in one grouped pass.
+# L: long table (vid, team, interv, val); cats: var_cat of each vid in `vids`; base_cnt: all-row counts per (team, interv).
+# Returns (vid, team, interv, p) for every eligible interviewer.
+# Chi-square of the 2 x K table interviewer vs rest of team, exact and without building the table: with column totals c_k,
+# n1 (interviewer), n2 (rest), N = n1 + n2, a value never recorded by the interviewer adds E1 + (c_k - E2)^2 / E2, which sums
+# over all values to n1 + n1^2 / n2; the values the interviewer recorded (A_k > 0) replace that term by the full one.
+flag_test_block <- function(L, vids, cats, base_cnt, o) {
+  cat_of <- stats::setNames(cats, vids)
+  cnt <- if (isTRUE(o$test_min_nonmissing)) L[, .(n_i = .N), by = .(vid, team, interv)]
+         else base_cnt[rep(seq_len(nrow(base_cnt)), length(vids))][, vid := rep(vids, each = nrow(base_cnt))][]
+  cnt[, `:=`(N_t = sum(n_i), n_int = .N), by = .(vid, team)]
+  elig <- cnt[n_int >= 2 & n_i >= o$test_min & N_t >= 2 * o$test_min & N_t > n_i, .(vid, team, interv)]
+  if (!nrow(elig)) return(data.table(vid = integer(), team = integer(), interv = numeric(), p = numeric()))
+  L <- L[unique(elig[, .(vid, team)]), on = .(vid, team), nomatch = NULL]   # only teams with something to test
+  is_co <- cat_of[as.character(L$vid)] == "CO"
+  # categorical (chi-square)
+  cell <- L[!is_co, .(A = .N), by = .(vid, team, interv, val)]
+  cell[, ck := sum(A), by = .(vid, team, val)]
+  cell[, `:=`(n1 = sum(A)), by = .(vid, team, interv)]
+  cell[, `:=`(N = sum(A), K = uniqueN(val)), by = .(vid, team)]
+  cell[, `:=`(n2 = N - n1, E1 = n1 * ck / N)]
+  cell[, E2 := n2 * ck / N]
+  cell[, d := (A - E1)^2 / E1 + (ck - A - E2)^2 / E2 - (E1 + (ck - E2)^2 / E2)]
+  ri <- cell[, .(chi = n1[1] + n1[1]^2 / n2[1] + sum(d), K = K[1], n2 = n2[1]), by = .(vid, team, interv)]
+  ri[, p := 1]
+  ri[K >= 2 & n2 > 0, p := stats::pchisq(pmax(chi, 0), K - 1, lower.tail = FALSE)]
+  # continuous (pooled t-test, values centred on the team mean as before)
+  st <- L[is_co]
+  st[, val := val - mean(val), by = .(vid, team)]
+  st <- st[, .(n1 = .N, s1 = sum(val), ss1 = sum(val^2)), by = .(vid, team, interv)]
+  st[, `:=`(N = sum(n1), S = sum(s1), SS = sum(ss1)), by = .(vid, team)]
+  st[, p := ttest_rows(n1, s1, ss1, N, S, SS)]
+  pr <- rbind(ri[, .(vid, team, interv, p)], st[, .(vid, team, interv, p)])
+  r <- pr[elig, on = .(vid, team, interv)]
+  r[is.na(p) & cat_of[as.character(vid)] != "CO", p := 1]           # eligible but no answer recorded in the team: no test, no flag
+  r
+}
+
 #' Flag analysis (vectorised engine)
 #' @param p prepared object from ipm_prepare()
 #' @return list with tests (one row per test), scores, flagged tables and plots
@@ -157,26 +195,34 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
   o <- p$cfg$options; pb <- period_bounds(p$cfg)
   tests <- list(); tables <- list(); retained <- list(); clus <- list()
   dsl <- names(p$ds)[vapply(names(p$ds), function(n) length(p$cfg$datasets[[n]]$flag_modules) > 0, logical(1))]
+  max_rows <- getOption("ipmR.flag_block_rows", 4e6)                  # bounds the memory of one block of questions
   for (dsn in dsl) {
     progress(sprintf("Flag analysis: %s", dsn))
     d <- p$cfg$datasets[[dsn]]
-    x <- copy(p$ds[[dsn]])
+    x <- p$ds[[dsn]]
     if ("result" %in% names(x)) x <- x[result %in% o$interco]
-    x <- x[!is.na(doi) & doi >= pb$start & doi <= pb$end]
+    x <- x[!is.na(doi) & doi >= pb$start & doi <= pb$end]            # a subset: a new table, the prepared data is not modified
     varlab <- p$meta[[dsn]]$varlab; fmt <- p$meta[[dsn]]$fmt; vallab <- p$meta[[dsn]]$vallab
     if (length(d$flag_units)) { r <- make_unit_value_pairs(x, d$flag_units, varlab); x <- r$x; varlab <- r$varlab }
+    keep <- !is.na(x$team) & !is.na(x$interv)
     hu <- intersect(o$hhunit, names(x))                             # records per household: tests on such files are not on independent units
-    if (length(hu) == length(o$hhunit) && nrow(x[!is.na(team) & !is.na(interv)]))
-      clus[[dsn]] <- data.table(dataset = dsn, records = nrow(x[!is.na(team) & !is.na(interv)]), households = uniqueN(x[!is.na(team) & !is.na(interv)], by = hu))
+    if (length(hu) == length(o$hhunit) && any(keep))
+      clus[[dsn]] <- data.table(dataset = dsn, records = sum(keep), households = uniqueN(x[keep], by = hu))
     data_vars <- setdiff(names(x), c(utility_vars, "interv_label"))
     ign <- expand_varlist(d$flag_ignore, data_vars)
     if (length(ign)) { x[, (ign) := NULL]; data_vars <- setdiff(data_vars, ign) }
-    tx <- x[!is.na(team) & !is.na(interv)]
-    if (!nrow(tx)) next
+    if (!any(keep)) next
+    team <- x$team[keep]; interv <- x$interv[keep]
+    base_cnt <- data.table(team = team, interv = interv)[, .(n_i = .N), by = .(team, interv)]   # all-row counts (Stata: tab int_team)
 
-    # all-row counts per interviewer / team (Stata: tab int_team, summ int_team)
-    cnt_all <- tx[, .(n_i = .N), by = .(team, interv)]
-    cnt_all[, `:=`(N_t = sum(n_i), n_int = .N), by = team]
+    # every retained question becomes rows (vid, team, interv, val) of one long table, tested in blocks
+    meta <- list(); block <- list(); nrow_block <- 0; res_ds <- list()
+    flush <- function() {
+      if (!length(block)) return()
+      L <- rbindlist(block); block <<- list(); nrow_block <<- 0
+      vids <- unique(L$vid)
+      res_ds[[length(res_ds) + 1]] <<- flag_test_block(L, vids, vapply(meta[vids], `[[`, "", "var_cat"), base_cnt, o)
+    }
     for (mod in d$flag_modules) {
       vars <- if (identical(trimws(mod), "*")) data_vars else expand_varlist(mod, data_vars)
       varorder <- 0L
@@ -184,62 +230,43 @@ flag_analysis <- function(p, progress = function(...) NULL, make_tables = TRUE, 
         pv <- prep_variable(x[[v]], fmt[v] %||% "", o)
         if (is.null(pv)) next
         varorder <- varorder + 1L
-        vname <- sprintf("v%05d_%s", varorder, v)
-        retained[[length(retained) + 1]] <- data.table(dataset = dsn, module = mod, variable = v)
-        val <- pv$val[!is.na(x$team) & !is.na(x$interv)]
-        dt <- data.table(team = tx$team, interv = tx$interv, val = val)
-        if (pv$cat == "CA") dt <- dt[!is.na(val)]
-        cc <- copy(cnt_all)
-        if (isTRUE(o$test_min_nonmissing)) {
-          cc <- dt[, .(n_i = .N), by = .(team, interv)]; cc[, `:=`(N_t = sum(n_i), n_int = .N), by = team]
-        }
-        elig <- cc[n_int >= 2 & n_i >= o$test_min & N_t >= 2 * o$test_min & N_t > n_i]
-        if (!nrow(elig)) next
-        res <- list()
-        for (tm in unique(elig$team)) {
-          ints <- elig[team == tm, interv]
-          dtt <- dt[team == tm]
-          if (pv$cat %in% c("CA", "SS")) {
-            if (!nrow(dtt)) { pvals <- rep(1, length(ints)) } else {
-              tab <- dtt[, .N, by = .(interv, val)]
-              allint <- sort(unique(c(ints, tab$interv)))
-              A <- matrix(0, length(allint), length(unique(tab$val)), dimnames = list(allint, NULL))
-              A[cbind(match(tab$interv, allint), match(tab$val, unique(tab$val)))] <- tab$N
-              pr <- chi2_rows(A)
-              pvals <- pr[match(ints, allint)]
-              pvals[is.na(pvals)] <- 1
-            }
-            ttype <- "chi2-test"
-          } else {
-            mu <- mean(dtt$val)
-            st <- dtt[, .(n1 = .N, s1 = sum(val - mu), ss1 = sum((val - mu)^2)), by = interv]
-            N <- sum(st$n1); S <- sum(st$s1); SS <- sum(st$ss1)
-            st <- st[match(ints, interv)]
-            pvals <- ttest_rows(st$n1, st$s1, st$ss1, N, S, SS)
-            ttype <- "t-test"
-          }
-          res[[length(res) + 1]] <- data.table(dataset = dsn, module = mod, interv = ints, team = tm, variable = vname,
-                                               varname = v, vardesc = varlab[v] %||% "", test = ttype, var_cat = pv$cat, p = pvals)
-        }
-        res <- rbindlist(res)
-        res[, flag := as.integer(!is.na(p) & p < o$levelsig)]
-        res[, pattern := NA_character_]
-        if (any(res$flag == 1)) {
-          for (k in which(res$flag == 1)) {
-            tr <- x[!is.na(team) & team == res$team[k]]
-            pat <- flag_pattern(tr[[v]], tr$interv == res$interv[k], pv$cat, vallab[[v]], res$interv[k],
-                                p$team_info$team_label[match(res$team[k], p$team_info$team)] %||% paste0("T", res$team[k]))
-            set(res, i = k, j = "pattern", value = pat)
-            if (make_tables) tables[[length(tables) + 1]] <- list(
-              dataset = dsn, team = res$team[k], interv = res$interv[k], variable = v, module = mod, test = res$test[k], p = res$p[k],
-              title = sprintf("Var=%s  Interv=%g  Period=%s  %s p<%s", v, res$interv[k], pb$label, res$test[k], fmt_int(o$levelsig)),
-              desc = varlab[v] %||% "", pattern = pat,
-              table = flag_crosstab(tr, v, vallab[[v]]))
-          }
-        }
-        tests[[length(tests) + 1]] <- res
+        vid <- length(meta) + 1L
+        meta[[vid]] <- list(vid = vid, dataset = dsn, module = mod, variable = sprintf("v%05d_%s", varorder, v), varname = v,
+                            vardesc = varlab[v] %||% "", var_cat = pv$cat)
+        val <- pv$val[keep]
+        if (is.character(val)) val <- match(val, sort(unique(val)))       # one-character strings: categories -> codes
+        sel <- if (pv$cat == "CA") !is.na(val) else rep(TRUE, length(val))
+        block[[length(block) + 1]] <- list(vid = rep.int(vid, sum(sel)), team = team[sel], interv = interv[sel], val = as.numeric(val[sel]))
+        nrow_block <- nrow_block + sum(sel)
+        if (nrow_block >= max_rows) flush()
       }
     }
+    flush()
+    if (!length(meta)) next
+    mt <- rbindlist(meta)
+    retained[[dsn]] <- mt[, .(dataset, module, variable = varname)]
+    res <- rbindlist(res_ds)
+    if (!nrow(res)) next
+    res <- mt[res, on = "vid"][order(vid, team, interv)]
+    res[, test := fifelse(var_cat == "CO", "t-test", "chi2-test")]
+    res[, flag := as.integer(!is.na(p) & p < o$levelsig)]
+    res[, pattern := NA_character_]
+    fk <- which(res$flag == 1L)
+    if (length(fk)) {
+      xt <- split(x[!is.na(team)], by = "team", keep.by = TRUE)       # rows of each team, split once
+      for (k in fk) {
+        tr <- xt[[as.character(res$team[k])]]; v <- res$varname[k]
+        pat <- flag_pattern(tr[[v]], tr$interv == res$interv[k], res$var_cat[k], vallab[[v]], res$interv[k],
+                            p$team_info$team_label[match(res$team[k], p$team_info$team)] %||% paste0("T", res$team[k]))
+        set(res, i = k, j = "pattern", value = pat)
+        if (make_tables) tables[[length(tables) + 1]] <- list(
+          dataset = dsn, team = res$team[k], interv = res$interv[k], variable = v, module = res$module[k], test = res$test[k], p = res$p[k],
+          title = sprintf("Var=%s  Interv=%g  Period=%s  %s p<%s", v, res$interv[k], pb$label, res$test[k], fmt_int(o$levelsig)),
+          desc = varlab[v] %||% "", pattern = pat,
+          table = flag_crosstab(tr, v, vallab[[v]]))
+      }
+    }
+    tests[[dsn]] <- res[, .(dataset, module, interv, team, variable, varname, vardesc, test, var_cat, p, flag, pattern)]
   }
   tests <- rbindlist(tests)
   out <- list(tests = tests, tables = tables, period = pb$label, retained = rbindlist(retained),
