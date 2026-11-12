@@ -4,7 +4,7 @@
 * Flag tests: one grouped pass per block of questions instead of one test at a time, with an exact closed-form chi-square: 60 s to 5 s (#45).
 * Graphs no longer keep a hidden copy of the data they were built from (ggplot environments): stored outputs from 1.1 GB to 0.26 GB, which also makes the app's background runs and downloads lighter (#46).
 * Flag tables documents and the report's large tables are written as Word XML and put into the saved file in one step, instead of one element at a time: the 27 flag tables files from about 4 minutes to 8 s (#47).
-* Graphs of the report are drawn on several processes (forked on Linux, background R sessions on Windows; option `workers`, "auto" = cores - 1, at most 6 and one per GB of free memory). A job that fails in a worker is redone in the main process; without the installed package (shinyapps.io bundle) everything runs in one process (#48).
+* Graphs of the report are drawn on several processes (forked on Linux, background R sessions on Windows; option `workers`, "auto" = cores - 1, at most 6 and one per 0.6 GB of free memory). A job that fails in a worker is redone in the main process; without the installed package (shinyapps.io bundle) everything runs in one process (#48).
 
 **Other**
 * One box to load the data: drop the export folder, the .sav / .dta files or a .zip on it, or click it to choose; only data files are sent (other files in the folder are ignored). Replaces the three separate options; reading a folder in place (local app only) is folded under "Very large files..." (#44).

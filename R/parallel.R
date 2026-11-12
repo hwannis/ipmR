@@ -100,7 +100,7 @@ slim_plots <- function(x) {
 #' Number of worker processes for the report
 #'
 #' Option `workers` ("auto" or a number; 1 = no parallel work). "auto" uses one core less than the machine has,
-#' at most one worker per GB of free memory, at most 6 (more brings nothing: drawing 97 Somalia graphs took
+#' at most one worker per 0.6 GB of free memory, at most 6 (more brings nothing: drawing 97 Somalia graphs took
 #' 52 s on 1 process, 22 s on 4, 21 s on 6), and never more than there are jobs.
 #' Parallel work needs the installed ipmR package (workers load it); otherwise it falls back to one process.
 #' @param o options list
@@ -111,9 +111,17 @@ ipm_workers <- function(o, jobs) {
   if (!identical(w, "auto")) return(max(1L, min(as.integer(w), jobs)))
   cores <- tryCatch(parallel::detectCores(logical = TRUE), error = function(e) 1L); if (is.na(cores)) cores <- 1L
   free_gb <- tryCatch(ps::ps_system_memory()[["avail"]] / 2^30, error = function(e) 4)
-  w <- max(1L, min(cores - 1L, floor(free_gb), 6L, jobs))
+  by_mem <- floor(free_gb / 0.6)                                      # a worker drawing graphs peaks under 0.5 GB
+  w <- max(1L, min(cores - 1L, by_mem, 6L, jobs))
   if (nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_")) && !identical(Sys.getenv("_R_CHECK_LIMIT_CORES_"), "false")) w <- min(w, 2L)   # R CMD check
-  as.integer(w)
+  why <- if (w < min(cores - 1L, 6L, jobs) && by_mem <= w)
+    sprintf("only %.1f GB of memory free - close other programs to use more cores", free_gb) else ""
+  structure(as.integer(w), why = why)
+}
+# " (3 processes)" or " (one process: only 0.6 GB of memory free ...)" for progress messages
+workers_note <- function(nw) {
+  why <- attr(nw, "why") %||% ""
+  if (nw > 1) sprintf(" (%d processes%s)", nw, if (nzchar(why)) paste0("; ", why) else "") else if (nzchar(why)) sprintf(" (one process: %s)", why) else ""
 }
 
 # Source folder when ipmR was loaded with pkgload::load_all(), else ""

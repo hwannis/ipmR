@@ -32,7 +32,7 @@ ipm_defaults <- function() {
     period_weeks_only    = FALSE,     # TRUE: descriptive charts (outputs 2-8) show only the weeks of the period of analysis
     stata_compat         = FALSE,     # TRUE: reproduce the Stata IPM numbers - period of start + days (one day more), records up to
                                       #   6 days before week 1 counted in week 1 (truncation), min. obs on records (overrides test_min_nonmissing)
-    workers              = "auto"     # processes drawing graphs and writing flag tables: "auto" (cores - 1, 1 per GB of free memory, max 6) or a number; 1 = none
+    workers              = "auto"     # processes drawing graphs and writing flag tables: "auto" (cores - 1, 1 per 0.6 GB of free memory, max 6) or a number; 1 = none
   )
 }
 

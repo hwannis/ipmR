@@ -65,7 +65,7 @@ draw_report_plots <- function(plots, dir, o, progress = function(...) NULL) {
   plots <- plots[!duplicated(key)]; key <- key[!duplicated(key)]
   jobs <- lapply(seq_along(plots), function(i) list(plot = slim_plot(plots[[i]]), file = file.path(dir, sprintf("fig_%04d.png", i))))
   nw <- if (length(jobs) < 12) 1L else ipm_workers(o, length(jobs))
-  progress(sprintf("Drawing %d graphs%s", length(jobs), if (nw > 1) sprintf(" (%d processes)", nw) else ""))
+  progress(sprintf("Drawing %d graphs%s", length(jobs), workers_note(nw)))
   files <- ipm_parallel(jobs, png_job, dpi = o$fig_dpi, workers = nw, progress = progress)
   stats::setNames(as.list(unlist(files)), key)
 }
