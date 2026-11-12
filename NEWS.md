@@ -1,3 +1,5 @@
+# ipmR (development version)
+
 # ipmR 0.6.2
 
 **Speed (phase 2)** - Somalia (10 questionnaires, 52,808 tests, 2,453 flag tables): full run with report from about 6-7 minutes to about 1 minute; peak memory from 8 GB to under 1 GB. Same numbers as before (all tests, flags, readings, flag tables and the scorecard are identical).
