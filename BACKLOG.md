@@ -3,7 +3,7 @@
 Bugs and improvements are logged here and released in batches of about 10 or more, not one release per fix.
 Work happens on the `dev` branch; a batch is merged into `main` with a new version number, which publishes the release.
 
-Status: `open`, `done (dev)` = fixed on the dev branch and waiting for the next release, `done (x.y.z)` = released in that version.
+Status: `open`, `done (0.6.1)` = fixed on the dev branch and waiting for the next release, `done (x.y.z)` = released in that version.
 Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while testing.
 
 ## Data and datasets
@@ -63,17 +63,17 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 26 | Chi-square on sparse, many-category variables (e.g. BH4D day of birth, 31 values) gives false flags; add a minimum-expected-count rule or collapse rare categories (optional, keeping Stata parity by default). | HW | closed: simulation shows sparse chi-square is conservative and pooling does not reduce flags |
 | 27 | Net-level (tn) records are not independent (several nets per household): test at household level or flag the caveat. | HW | done (0.6.0) |
 | 28 | Height heaping by measurer (AN7), not only by team: that is what teams act on. | HW | done (0.6.0) |
-| 29 | Foundational learning (FL) checks: assessment duration, no attempt, story reached, practice-question exits. | HW | done (dev) |
+| 29 | Foundational learning (FL) checks: assessment duration, no attempt, story reached, practice-question exits. | HW | done (0.6.1) |
 | 30 | The "x times what chance would produce" headline overstates the effect (sparse cells, non-independent tests); reword and explain. | HW | done (0.6.0) |
 | 31 | The app does not show its version: add "ipmR x.y.z" to the header or footer so users can check which release the server runs. | HW | done (0.6.0) |
 | 32 | The app does not start when no AI connection is configured on the server ("attempt to set an attribute on NULL"); since 0.4.0. | CL | done (0.6.0) |
 | 33 | Flag settings check: "RHS of == is length 0" under the module table when no module is selected (req(length(x)) does not stop on 0; same pattern in 4 other places). | HW | done (0.6.0) |
-| 36 | One impossible or missing date on the first record (e.g. 31 Feb) blanked every date of the dataset (outputs empty, no period proposed). | CL (review Nov 2026) | done (dev) |
-| 37 | Interviewers were tested on their number of records, not on their answers to the question: flags from 1-4 answers (83 of 3,809 in Somalia) and 22% of tests on interviewers with < 5 answers, diluting the flag rate. Default now counts answers. | CL (review) | done (dev) |
-| 38 | The period of analysis covered one day more than asked (21 days = 22; label ended the day after the last interview). | CL (review) | done (dev) |
-| 39 | Records up to 6 days before week 1 were counted in week 1 (truncation instead of floor). | CL (review) | done (dev) |
-| 40 | With teams defined by a supervisor variable, linked files without that variable (hl, bh, mm, tn) lost their team and dropped out of every output; they now take the team of the parent record. | CL (review) | done (dev) |
-| 41 | One empty file or variable (common early in fieldwork) stopped the whole run; now a warning and the dataset is skipped. | CL (review) | done (dev) |
-| 42 | Missing, reversed or overlapping team ranges were accepted without error. | CL (review) | done (dev) |
-| 35 | Loading only an individual questionnaire (e.g. wm.sav, Madagascar MICS6) without the household file stops with "argument is of length zero" (no household questionnaire was taken as NA); fieldwork dates now come from the questionnaire loaded. | HW | done (dev) |
-| 34 | The report and the rule-based plan fail ("object 'rate' not found", "argument is of length zero") when the flag analysis is not part of the run. | CL (FL test on Somalia data) | done (dev) |
+| 36 | One impossible or missing date on the first record (e.g. 31 Feb) blanked every date of the dataset (outputs empty, no period proposed). | CL (review Nov 2026) | done (0.6.1) |
+| 37 | Interviewers were tested on their number of records, not on their answers to the question: flags from 1-4 answers (83 of 3,809 in Somalia) and 22% of tests on interviewers with < 5 answers, diluting the flag rate. Default now counts answers. | CL (review) | done (0.6.1) |
+| 38 | The period of analysis covered one day more than asked (21 days = 22; label ended the day after the last interview). | CL (review) | done (0.6.1) |
+| 39 | Records up to 6 days before week 1 were counted in week 1 (truncation instead of floor). | CL (review) | done (0.6.1) |
+| 40 | With teams defined by a supervisor variable, linked files without that variable (hl, bh, mm, tn) lost their team and dropped out of every output; they now take the team of the parent record. | CL (review) | done (0.6.1) |
+| 41 | One empty file or variable (common early in fieldwork) stopped the whole run; now a warning and the dataset is skipped. | CL (review) | done (0.6.1) |
+| 42 | Missing, reversed or overlapping team ranges were accepted without error. | CL (review) | done (0.6.1) |
+| 35 | Loading only an individual questionnaire (e.g. wm.sav, Madagascar MICS6) without the household file stops with "argument is of length zero" (no household questionnaire was taken as NA); fieldwork dates now come from the questionnaire loaded. | HW | done (0.6.1) |
+| 34 | The report and the rule-based plan fail ("object 'rate' not found", "argument is of length zero") when the flag analysis is not part of the run. | CL (FL test on Somalia data) | done (0.6.1) |

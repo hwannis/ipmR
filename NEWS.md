@@ -1,4 +1,4 @@
-# ipmR (development version)
+# ipmR 0.6.1
 
 Work on the dev branch since 0.6.0 (BACKLOG.md items in brackets).
 
