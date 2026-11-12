@@ -177,7 +177,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.6.0"
+IPMR_VERSION <- "0.6.1"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
 utils_pkgver <- function() IPMR_VERSION
 
 report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL) {

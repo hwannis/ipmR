@@ -1,3 +1,8 @@
+# ipmR (development version)
+
+* One box to load the data: drop the export folder, the .sav / .dta files or a .zip on it, or click it to choose; only data files are sent (other files in the folder are ignored). Replaces the three separate options; reading a folder in place (local app only) is folded under "Very large files..." (#44).
+* Fix: the app and reports showed version 0.6.0 in release 0.6.1; a test now checks that the version shown matches DESCRIPTION (#43).
+
 # ipmR 0.6.1
 
 Work on the dev branch since 0.6.0 (BACKLOG.md items in brackets).

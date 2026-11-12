@@ -27,9 +27,69 @@ sel <- function(id, label, choices, selected, multiple = FALSE)
   selectizeInput(id, label, choices = choices, selected = selected %||% "", multiple = multiple, width = "100%", options = list(placeholder = "(none)"))
 ds_fields <- c(interviewer = "Interviewer no.", result = "Result (1 = completed)", day = "Day of interview", start_hour = "Hour begins", end_hour = "Hour ends")
 
-folder_input <- function(id, label) {
-  fi <- fileInput(id, label, multiple = TRUE, buttonLabel = "Select folder...", placeholder = "No folder selected", width = "100%")
-  htmltools::tagQuery(fi)$find("input")$filter(function(x, i) identical(x$attribs$type, "file"))$addAttrs(webkitdirectory = NA, directory = NA, mozdirectory = NA)$allTags()
+# One drop zone for everything: a folder, .sav/.dta files or a .zip, dropped or chosen.
+# The files are filtered in the browser (only .sav/.dta/.zip are sent) and handed to one hidden Shiny fileInput,
+# whose progress bar stays visible under the zone.
+data_drop <- function(id) {
+  js <- sprintf("
+(function(){
+  var ok = /\\.(sav|dta|zip)$/i;
+  function zone(){ return document.getElementById('%1$s_zone'); }
+  function say(t){ var s = document.getElementById('%1$s_status'); if (s) s.textContent = t; }
+  function send(files){
+    var keep = files.filter(function(f){ return ok.test(f.name); });
+    if (!keep.length) { say('No .sav, .dta or .zip file in what you chose (' + files.length + ' other files).'); return; }
+    var mb = keep.reduce(function(a, f){ return a + f.size; }, 0) / 1048576;
+    var other = files.length - keep.length;
+    say('Sending ' + keep.length + ' data file' + (keep.length > 1 ? 's' : '') + ' (' + mb.toFixed(1) + ' MB)' +
+        (other ? '; ' + other + ' other file' + (other > 1 ? 's' : '') + ' ignored.' : '.'));
+    var dt = new DataTransfer(); keep.forEach(function(f){ dt.items.add(f); });
+    var inp = document.getElementById('%1$s'); inp.files = dt.files;
+    inp.dispatchEvent(new Event('change', {bubbles: true}));
+  }
+  function walk(entry, out){ return new Promise(function(res){
+    if (entry.isFile) entry.file(function(f){ out.push(f); res(); }, function(){ res(); });
+    else if (entry.isDirectory) { var r = entry.createReader(), all = [];
+      (function next(){ r.readEntries(function(es){ if (!es.length) Promise.all(all.map(function(e){ return walk(e, out); })).then(res);
+                                                    else { all.push.apply(all, es); next(); } }, function(){ res(); }); })(); }
+    else res(); }); }
+  document.addEventListener('dragover', function(e){ if (e.target.closest && e.target.closest('#%1$s_zone')) { e.preventDefault(); zone().classList.add('over'); } });
+  document.addEventListener('dragleave', function(e){ if (e.target.closest && e.target.closest('#%1$s_zone')) zone().classList.remove('over'); });
+  document.addEventListener('drop', function(e){
+    if (!(e.target.closest && e.target.closest('#%1$s_zone'))) return;
+    e.preventDefault(); zone().classList.remove('over');
+    var items = e.dataTransfer.items, entries = [];
+    if (items) for (var i = 0; i < items.length; i++) { var en = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry(); if (en) entries.push(en); }
+    if (!entries.length) { send(Array.prototype.slice.call(e.dataTransfer.files)); return; }
+    say('Reading what was dropped...');
+    var out = []; Promise.all(entries.map(function(en){ return walk(en, out); })).then(function(){ send(out); });
+  });
+  document.addEventListener('click', function(e){
+    if (e.target.closest && e.target.closest('#%1$s_folder_link')) { e.preventDefault(); e.stopPropagation(); document.getElementById('%1$s_pick_folder').click(); return; }
+    if (e.target.closest && e.target.closest('#%1$s_zone')) document.getElementById('%1$s_pick_files').click();
+  });
+  document.addEventListener('change', function(e){
+    if (e.target.id === '%1$s_pick_files' || e.target.id === '%1$s_pick_folder') { send(Array.prototype.slice.call(e.target.files)); e.target.value = ''; }
+  });
+})();", id)
+  div(id = paste0(id, "_wrap"),
+    tags$style(HTML(sprintf("
+      #%1$s_zone {border:2px dashed #1CABE2; border-radius:10px; padding:26px 14px; text-align:center; cursor:pointer; background:#f4fbfe; transition:background .15s}
+      #%1$s_zone:hover, #%1$s_zone.over {background:#dff3fb}
+      #%1$s_zone .big {font-size:1.05em; font-weight:600; color:#0b5a75}
+      #%1$s_zone .small {font-size:0.85em; color:#555; margin-top:6px}
+      #%1$s_status {font-size:0.85em; margin-top:8px; min-height:1.2em; color:#0b5a75}
+      #%1$s_wrap .input-group, #%1$s_wrap .control-label {display:none}
+      #%1$s_wrap .shiny-input-container {margin-bottom:0}", id))),
+    div(id = paste0(id, "_zone"), role = "button", tabindex = "0", `aria-label` = "Add the survey data",
+      div(class = "big", icon("cloud-arrow-up"), " Drop your data here, or click to choose"),
+      div(class = "small", "The export folder, the .sav / .dta files, or a .zip - all work. ",
+          tags$a(href = "#", id = paste0(id, "_folder_link"), "Choose a folder instead"))),
+    div(id = paste0(id, "_status")),
+    tags$input(type = "file", id = paste0(id, "_pick_files"), multiple = NA, accept = ".sav,.dta,.zip", style = "display:none"),
+    tags$input(type = "file", id = paste0(id, "_pick_folder"), multiple = NA, webkitdirectory = NA, directory = NA, style = "display:none"),
+    fileInput(id, NULL, multiple = TRUE, width = "100%"),
+    tags$script(HTML(js)))
 }
 
 howto <- ipm_howto()
@@ -140,13 +200,14 @@ ipm_ui <- page_navbar(
   # ---------------- 1. DATA ----------------
   nav_panel("1. Data", value = "data",
     explain("Loads the survey data files exported from CSPro/SPSS (hh, hl, wm, bh, ch, fs, mn ... in .sav or .dta format) and automatically recognises the MICS structure: which file is which questionnaire, the interviewer, result, date and time variables, the links between files, the teams and the modules to test. It works for any MICS survey (MICS5-MICS7) whatever the language of the labels.",
-            "Click 'Select folder...' and choose the folder that contains the .sav files of your latest data export (or select the files themselves, or a .zip of the folder). Wait for the green confirmation, check the table, then go to the next step."),
+            "Drop the folder of your latest data export (or its .sav files, or a .zip of it) on the box, or click the box to choose. Wait for the green confirmation, check the table, then go to the next step."),
     layout_columns(col_widths = c(5, 7),
       card(card_header("Load the survey datasets"),
-        folder_input("up_folder", "Option A - the folder with the data files"),
-        fileInput("up_files", "Option B - the data files (.sav / .dta) or a .zip", multiple = TRUE, accept = c(".sav", ".dta", ".zip"), width = "100%"),
-        if (LOCAL_MODE) textInput("data_dir", "Option C - path of a folder on this computer", value = getOption("ipmR.data_dir", ""), width = "100%"),
-        if (LOCAL_MODE) actionButton("scan", "Read folder", class = "btn-primary"),
+        data_drop("up_data"),
+        if (LOCAL_MODE) tags$details(style = "margin-top:6px; font-size:0.9em",
+          tags$summary("Very large files on this computer or a network drive? Read them where they are"),
+          div(style = "margin-top:8px", textInput("data_dir", NULL, value = getOption("ipmR.data_dir", ""), width = "100%", placeholder = "e.g. Z:/MICS/Somalia/21 Oct"),
+              actionButton("scan", "Read this folder", class = "btn-outline-primary btn-sm"))),
         div(class = "howto", tags$b("Your data. "), sprintf("Files are processed only within your own session and are never shared with other users. Name and other free-text variables are removed when the files are read. All uploaded files, results and reports are deleted from the server when you close the browser tab, after %s minutes of inactivity, or immediately with the button below. Do not upload data you are not authorised to process on this server.", format(IDLE_MINUTES))),
         actionButton("wipe", "Delete my data now", class = "btn-outline-danger")),
       card(card_header("What was found"), uiOutput("found_ui"), tableOutput("found_tbl"))),
@@ -442,8 +503,7 @@ ipm_server <- function(input, output, session) {
     showNotification(sprintf("%d datasets read: %d questionnaires recognised, %d teams.", n,
                              sum(vapply(rv$cfg$datasets, function(d) !is.null(d$result), logical(1))), length(rv$cfg$teams$ranges)), type = "message", duration = 8)
   }
-  observeEvent(input$up_folder, ingest(input$up_folder$datapath, input$up_folder$name))
-  observeEvent(input$up_files, ingest(input$up_files$datapath, input$up_files$name))
+  observeEvent(input$up_data, ingest(input$up_data$datapath, input$up_data$name))
   observeEvent(input$scan, { req(dir.exists(input$data_dir)); configure(input$data_dir) })
 
   apply_cfg <- function(cfg, keep_paths = FALSE) {
