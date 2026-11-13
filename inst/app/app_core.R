@@ -166,7 +166,7 @@ idle_js <- sprintf("
 ipm_ui <- page_navbar(
   title = tags$span(tags$b("IPM"), " Interviewer Performance Monitoring for MICS",
                     tags$span(style = "font-size:0.7em; opacity:0.85; margin-left:10px", paste0("ipmR ", .int$version %||% ""))),
-  theme = theme, id = "nav", fillable = FALSE, bg = cyan, inverse = TRUE,
+  theme = theme, id = "nav", fillable = FALSE, bg = cyan, inverse = TRUE, selected = "data",
   header = tags$head(tags$script(HTML(idle_js)), tags$style(HTML("
     .navbar .navbar-brand, .navbar .nav-link {color:white !important}
     .navbar .nav-link.active {border-bottom:3px solid white}
@@ -195,8 +195,51 @@ ipm_ui <- page_navbar(
     .chata {border-left:3px solid #1CABE2; padding:4px 12px; margin:4px 0 10px 0; font-size:0.93em}
     h5.sch {color:#1CABE2; font-weight:bold; margin-top:22px}
     [id^=fi_] + .selectize-control .selectize-input {max-height:120px; overflow-y:auto}
-    pre.json {max-height:60vh; overflow:auto; font-size:0.75em; background:#f6f6f6}"))),
+    pre.json {max-height:60vh; overflow:auto; font-size:0.75em; background:#f6f6f6}
+    .bf {max-width:1280px; margin:0 auto; padding:6px 4px 30px 4px; font-family:'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif}
+    .bf-top {display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin:6px 0 16px 0}
+    .bf-meta {font-size:0.85em; color:#5f6368}
+    .bf-title {font-size:1.6em; font-weight:600; color:#1f2a44; line-height:1.2}
+    .bf-kpis {display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:18px}
+    .bf-kpi {background:white; border:1px solid #e6e8ec; border-radius:10px; padding:12px 16px}
+    .bf-kpi .l {font-size:0.82em; color:#5f6368}
+    .bf-kpi .v {font-size:1.9em; font-weight:600; color:#1f2a44; line-height:1.2}
+    .bf-kpi .d {font-size:0.55em; font-weight:600; margin-left:6px; vertical-align:middle}
+    .bf-up {color:#C4161C} .bf-down {color:#00833D} .bf-same {color:#8A8A8A}
+    .bf-cols {display:grid; grid-template-columns:minmax(0, 7fr) minmax(0, 5fr); gap:18px}
+    @media (max-width: 992px) {.bf-cols {grid-template-columns:minmax(0, 1fr)}}
+    .bf-card {background:white; border:1px solid #e6e8ec; border-radius:10px; padding:14px 16px; margin-bottom:18px}
+    .bf-card h4 {font-size:1.05em; font-weight:600; color:#1f2a44; margin:0 0 4px 0}
+    .bf-card .hint {font-size:0.8em; color:#5f6368; margin-bottom:6px}
+    .bf-item {display:grid; grid-template-columns:118px minmax(0, 1fr) auto; gap:12px; align-items:start; padding:11px 0; border-top:1px solid #eef0f3}
+    @media (max-width: 600px) {.bf-item {grid-template-columns:minmax(0, 1fr)}}
+    .bf-pill {display:inline-block; font-size:0.78em; font-weight:600; padding:3px 9px; border-radius:20px; white-space:nowrap}
+    .bf-pill.high {background:#FDE8E7; color:#A3120F} .bf-pill.medium {background:#FEF0E6; color:#9A4A0F} .bf-pill.low {background:#F1F2F4; color:#555}
+    .bf-pill.iv {background:#EAEFFA; color:#2B3F87}
+    .bf-head {font-weight:600; color:#1f2a44; font-size:0.95em}
+    .bf-sub {font-size:0.8em; color:#5f6368; margin-top:2px}
+    .bf-do {font-size:0.85em; color:#2B3F87; margin-top:4px}
+    .bf-acts {display:flex; flex-direction:column; align-items:flex-end; gap:6px}
+    .bf-chip {font-size:0.72em; padding:2px 8px; border-radius:20px; white-space:nowrap}
+    .bf-chip.new {background:#E6F4FB; color:#0B5A75} .bf-chip.old {background:#FFF3D6; color:#7A5300} .bf-chip.chg {background:#F1F2F4; color:#444}
+    .bf-acts .btn {font-size:0.78em; padding:2px 10px; border-radius:6px}
+    .bf-grid {border-collapse:separate; border-spacing:3px; width:100%; font-size:0.78em}
+    .bf-grid th {font-weight:500; color:#5f6368; text-align:center; padding:0 2px; line-height:1.1}
+    .bf-grid td.t {white-space:nowrap; padding-right:6px; cursor:pointer; color:#1f2a44}
+    .bf-grid td.c {height:20px; border-radius:4px; background:#F3F4F6; cursor:pointer; text-align:center; color:white; font-size:0.85em}
+    .bf-grid td.c.s1 {background:#E2231A} .bf-grid td.c.s2 {background:#F6B26B} .bf-grid td.c.p {outline:2px solid #1f2a44; outline-offset:-2px}
+    .bf-legend {font-size:0.75em; color:#5f6368; margin-top:6px}
+    .bf-legend span {display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
+    .bf-line {font-size:0.86em; padding:6px 0; border-top:1px solid #eef0f3}
+    .bf-empty {max-width:640px; margin:60px auto; text-align:center}
+    .bf-ev {border-top:1px solid #eef0f3; padding:10px 0}
+    .bf-ev .e {font-size:0.85em; color:#444; margin-top:3px}
+    .bf-ev .a {font-size:0.85em; color:#2B3F87; margin-top:3px}"))),
 
+  # ---------------- BRIEFING (home after a run) ----------------
+  nav_panel(tagList(icon("bolt"), "Briefing"), value = "briefing", uiOutput("brief")),
+
+  nav_menu(tagList(icon("sliders"), "Setup"), value = "setup",
   # ---------------- 1. DATA ----------------
   nav_panel("1. Data", value = "data",
     explain("Loads the survey data files exported from CSPro/SPSS (hh, hl, wm, bh, ch, fs, mn ... in .sav or .dta format) and automatically recognises the MICS structure: which file is which questionnaire, the interviewer, result, date and time variables, the links between files, the teams and the modules to test. It works for any MICS survey (MICS5-MICS7) whatever the language of the labels.",
@@ -287,7 +330,7 @@ ipm_ui <- page_navbar(
       card(card_header("Settings file"),
         p(class = "small-note", "Save the settings to reuse them with the next data export of the same survey (load them after uploading the data)."),
         downloadButton("cfg_download", "Save settings (YAML)"),
-        fileInput("cfg_upload", "Load settings (YAML)", accept = c(".yml", ".yaml"), width = "100%")))),
+        fileInput("cfg_upload", "Load settings (YAML)", accept = c(".yml", ".yaml"), width = "100%"))))),
 
   # ---------------- 7. RESULTS ----------------
   nav_panel("7. Results", value = "results",
@@ -389,12 +432,12 @@ ipm_server <- function(input, output, session) {
   sdir <- file.path(tempdir(), paste0("ipm_", session$token)); dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
   upload_dirs <- character()                       # Shiny's own temporary copies of uploaded files
   rv <- reactiveValues(cfg = NULL, light = NULL, res = NULL, log = character(), report = NULL, zip = NULL, n_files = 0,
-                       sc = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
+                       sc = NULL, cmp = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
   cleanup <- function() {
     if (exists("kill_jobs")) kill_jobs()
     wipe(c(sdir, upload_dirs))
     isolate({ rv$cfg <- NULL; rv$light <- NULL; rv$res <- NULL; rv$report <- NULL; rv$zip <- NULL
-              rv$sc <- NULL; rv$plan <- NULL; rv$chat <- list(); rv$ai_user <- NULL; rv$ai_test <- NULL })
+              rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); rv$ai_user <- NULL; rv$ai_test <- NULL })
     invisible(gc(verbose = FALSE))
   }
   session$onSessionEnded(function() cleanup())
@@ -469,7 +512,8 @@ ipm_server <- function(input, output, session) {
   })
   kill_jobs <- function() for (key in ls(bg)) { j <- bg[[key]]; try(j$p$kill(), silent = TRUE); try(j$pr$close(), silent = TRUE); unlink(j$pf); rm(list = key, envir = bg) }
   if (!is.null(pre <- getOption("ipmR.preload"))) isolate({   # testing only: preload a saved result
-    rv$res <- readRDS(pre); rv$sc <- tryCatch(ipm_scorecard(rv$res), error = function(e) NULL) })
+    rv$res <- readRDS(pre); rv$sc <- tryCatch(ipm_scorecard(rv$res), error = function(e) NULL)
+    rv$cmp <- tryCatch(ipm_history_update(rv$res, rv$sc), error = function(e) NULL) })
 
   nav_to <- function(v) bslib::nav_select("nav", v)
   observeEvent(input$go2, nav_to("settings")); observeEvent(input$go3, nav_to("datasets"))
@@ -750,15 +794,148 @@ ipm_server <- function(input, output, session) {
   observeEvent(input$run, {
     req(rv$cfg); if (job_running("run")) { showNotification("The analysis is already running.", type = "warning"); return() }
     cfg <- collect_cfg(); rv$log <- character(); rv$report <- NULL; rv$zip <- NULL
-    rv$res <- NULL; rv$sc <- NULL; rv$plan <- NULL; rv$chat <- list(); gc(verbose = FALSE)
+    rv$res <- NULL; rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); gc(verbose = FALSE)
     start_job("run", "run", list(cfg = cfg), "Running the IPM", if (BG_OK) "you can keep using the app; other users are not slowed down" else NULL, log = TRUE,
       done = function(r) {
         if (inherits(r, "error")) { m <- job_error(r); logm("ERROR:", m); showNotification(m, type = "error", duration = NULL); return() }
         if (is.character(r$sc)) { logm("Scorecard:", r$sc); r$sc <- NULL }
-        rv$sc <- r$sc; rv$res <- r$res; logm("Done."); nav_to("results")
+        rv$cmp <- if (!is.null(r$sc)) tryCatch(ipm_history_update(r$res, r$sc), error = function(e) { logm("Run history:", conditionMessage(e)); NULL })
+        rv$sc <- r$sc; rv$res <- r$res; logm("Done."); nav_to(if (!is.null(r$sc)) "briefing" else "results")
       })
   })
   output$log <- renderText(paste(rev(rv$log), collapse = "\n"))
+
+  # ---------- briefing (home page after a run) ----------
+  brief <- reactive({ req(rv$sc); ipm_briefing(rv$sc, rv$cmp) })
+  bf_nth <- function(n) paste0(n, if (n %% 100 %in% 11:13) "th" else c("th", "st", "nd", "rd", rep("th", 6))[n %% 10 + 1])
+  bf_date <- function(d) if (is.null(d) || is.na(d)) "-" else format(as.Date(d), "%d %b %Y")
+  bf_chip <- function(status, prev_priority = NA, priority = NA) tagList(
+    if (!is.na(status) && status != "first") span(class = paste("bf-chip", if (status == "new") "new" else "old"), if (status == "new") "New since last run" else status),
+    if (!is.na(prev_priority) && !is.na(priority) && prev_priority != priority) span(class = "bf-chip chg", paste("was", prev_priority)))
+  bf_btn <- function(id, value, label = "Evidence")
+    tags$button(class = "btn btn-outline-secondary", onclick = sprintf("Shiny.setInputValue('%s', %s, {priority: 'event'})", id, value), label)
+  output$brief <- renderUI({
+    if (is.null(rv$sc)) return(div(class = "bf bf-empty",
+      tags$h3("Your briefing appears here after a run"),
+      p(style = "color:#5f6368", "Load the latest data export, check the settings and click Run. You then see what to act on this week, and - from the second run of the same survey - what is new, what persists and what was resolved."),
+      actionButton("bf_start", "Load the data", class = "btn-primary")))
+    b <- brief(); res <- rv$res; ds <- res$data_summary
+    last <- suppressWarnings(max(as.Date(ds$last_day), na.rm = TRUE))
+    cmp_txt <- if (!is.null(b$previous)) sprintf("Compared with the export of %s (%d earlier run%s kept)", bf_date(b$previous$data_last), b$runs, if (b$runs > 1) "s" else "")
+               else if (!is.null(rv$cmp$saved)) "First run kept for this survey: the next run will show what is new, persisting and resolved"
+               else "Run history is off on this server"
+    kp <- b$kpi
+    kpis <- lapply(seq_len(nrow(kp)), function(i) { k <- kp[i]
+      d <- if (is.na(k$before)) NULL else { x <- k$now - k$before
+        cls <- if (x == 0) "bf-same" else if ((x > 0) == (k$what != "resolved")) "bf-up" else "bf-down"
+        span(class = paste("d", cls), if (x == 0) "same" else sprintf("%+d", x)) }
+      div(class = "bf-kpi", div(class = "l", k$label), div(class = "v", k$now, d)) })
+    if (is.null(b$previous)) kpis[[4]] <- div(class = "bf-kpi", div(class = "l", "Teams in the survey"), div(class = "v", nrow(rv$sc$teams)))
+
+    team_rows <- lapply(seq_len(nrow(b$teams)), function(i) { h <- b$teams[i]
+      div(class = "bf-item",
+        div(span(class = paste("bf-pill", tolower(h$priority)), sprintf("%s · %s", sub(" \\([^()]*\\)$", "", h$team_label), h$priority))),
+        div(div(class = "bf-head", h$headline),
+            div(class = "bf-sub", paste(c(if (h$more > 0) sprintf("+%d more team issue%s", h$more, if (h$more > 1) "s" else ""),
+                                          if (nzchar(h$interviewers)) paste("interviewers", h$interviewers)), collapse = " · ")),
+            div(class = "bf-do", icon("arrow-right"), sprintf(" %s (%s, %s)", h$do, h$owner, tolower(h$timing)))),
+        div(class = "bf-acts", bf_chip(h$status, h$prev_priority, h$priority), bf_btn("bf_team", h$team)))
+    })
+    iv_rows <- lapply(seq_len(nrow(b$interviewers)), function(i) { h <- b$interviewers[i]
+      div(class = "bf-item",
+        div(span(class = "bf-pill iv", sprintf("Int. %s · %s", fmt_i(h$interv), sub(" \\([^()]*\\)$", "", h$team_label)))),
+        div(div(class = "bf-head", h$headline), div(class = "bf-do", icon("arrow-right"), sprintf(" %s (%s, %s)", h$do, h$owner, tolower(h$timing)))),
+        div(class = "bf-acts", bf_chip(h$status), bf_btn("bf_iv", h$interv)))
+    })
+
+    # team health grid
+    g <- b$grid; ha <- .int$health_areas
+    short <- c(flags = "Flags", duration = "Length", completion = "Compl.", hhm = "Listing", dk = "DK", births = "Births", anthropometry = "Anthro", fl = "FL")
+    used <- names(ha)[names(ha) %in% g[!is.na(sev), harea] | names(ha) %in% c("flags", "duration", "completion")]
+    tms <- unique(g[, .(team, team_label, priority)])
+    click <- function(t) sprintf("Shiny.setInputValue('bf_team', %d, {priority: 'event'})", t)
+    grid <- tags$table(class = "bf-grid",
+      tags$tr(tags$th(""), lapply(used, function(a) tags$th(title = ha[[a]], short[[a]]))),
+      lapply(seq_len(nrow(tms)), function(i) { t <- tms[i]
+        tags$tr(tags$td(class = "t", onclick = click(t$team),
+                        span(style = sprintf("display:inline-block;width:7px;height:7px;border-radius:50%%;margin-right:5px;background:%s", prio_col[[t$priority]])),
+                        sub(" \\([^()]*\\)$", "", t$team_label)),
+                lapply(used, function(a) { z <- g[team == t$team & harea == a]
+                  if (!nrow(z) || is.na(z$sev)) return(tags$td(class = "c", title = sprintf("%s - %s: nothing found", t$team_label, ha[[a]])))
+                  tags$td(class = paste("c", paste0("s", z$sev), if (isTRUE(z$persisting)) "p"), title = sprintf("%s - %s:\n%s", t$team_label, ha[[a]], z$what),
+                          onclick = click(t$team), if (z$n > 1) z$n) }))
+      }))
+
+    q <- b$questionnaire
+    qmods <- if (nrow(q)) q[, .(qs = paste(head(stats::na.omit(question), 4), collapse = ", "), n = .N), by = .(dataset, module)][order(-n)] else NULL
+    res_rows <- if (nrow(b$resolved)) lapply(seq_len(min(nrow(b$resolved), 8)), function(i) { h <- b$resolved[i]
+      div(class = "bf-line", span(class = "bf-pill", style = "background:#E7F5EC;color:#0B6B33",
+                                  if (is.na(h$team)) "Survey" else if (h$level == "interviewer") sprintf("Int. %s", fmt_i(h$interv)) else sub(" \\([^()]*\\)$", "", h$team_label)),
+          " ", span(style = "color:#5f6368", "no longer found: "), h$headline) })
+
+    div(class = "bf",
+      div(class = "bf-top",
+        div(div(class = "bf-meta", sprintf("%s · data up to %s · period of analysis %s", res$cfg$survey_name %||% "Survey", bf_date(last), b$survey$period %||% "-")),
+            div(class = "bf-title", "Briefing"), div(class = "bf-meta", cmp_txt)),
+        div(downloadButton("bf_plan", "Action plan (Word)", class = "btn-sm btn-outline-primary"),
+            actionButton("bf_more", "All results", class = "btn-sm btn-outline-secondary", icon = icon("table")))),
+      div(class = "bf-kpis", kpis),
+      div(class = "bf-cols",
+        div(
+          div(class = "bf-card", tags$h4("Teams to act on this week"),
+              div(class = "hint", "High and Medium priority teams, most urgent first. The arrow is the first thing to do; 'Evidence' shows every issue with its figures and action."),
+              if (length(team_rows)) team_rows else div(class = "bf-line", "No team stands out this week.")),
+          div(class = "bf-card", tags$h4("Interviewers to observe now"),
+              div(class = "hint", "Interviewers with at least one high-severity issue, compared with their team-mates or the survey."),
+              if (length(iv_rows)) iv_rows else div(class = "bf-line", "No interviewer with a high-severity issue."))),
+        div(
+          div(class = "bf-card", tags$h4("Team health"),
+              div(class = "hint", "Worst issue of each team in each area (team or interviewer level). Point at a cell for the details, click a team for the evidence."),
+              grid,
+              div(class = "bf-legend", span(style = "background:#E2231A"), "high", span(style = "background:#F6B26B"), "medium",
+                  span(style = "background:#F3F4F6"), "nothing found",
+                  if (!is.null(b$previous)) tagList(span(style = "outline:2px solid #1f2a44;outline-offset:-2px;background:white"), "also at the last run"))),
+          div(class = "bf-card", tags$h4(sprintf("Questionnaire problems (%d)", nrow(q))),
+              div(class = "hint", "Questions flagged in most teams: check wording, translation and CAPI routing, and send one note to all teams. Not counted against teams."),
+              if (!is.null(qmods)) lapply(seq_len(min(nrow(qmods), 6)), function(i) div(class = "bf-line", tags$b(sprintf("%s %s", qmods$dataset[i], qmods$module[i])), " ",
+                                                                                     if (nzchar(qmods$qs[i])) qmods$qs[i] else "whole module"))
+              else div(class = "bf-line", "None: no question is flagged in most teams.")),
+          if (!is.null(b$previous)) div(class = "bf-card", tags$h4(sprintf("Resolved since the last run (%d)", nrow(b$resolved))),
+              if (length(res_rows)) res_rows else div(class = "bf-line", "Nothing resolved yet."),
+              if (nrow(b$resolved) > 8) div(class = "bf-line", sprintf("... and %d more.", nrow(b$resolved) - 8))),
+          div(class = "bf-meta", style = "margin-top:-6px",
+              if (!is.null(rv$cmp$saved)) tagList("The list of issues of each run (codes and figures, no records) is kept to compare runs. ",
+                                                  actionLink("bf_forget", "Forget this survey's history"))))))
+  })
+  observeEvent(input$bf_start, nav_to("data"))
+  observeEvent(input$bf_more, { nav_to("results"); bslib::nav_select("restabs", "scorecard") })
+  bf_evidence <- function(rows, title) {
+    showModal(modalDialog(title = title, size = "l", easyClose = TRUE, footer = modalButton("Close"),
+      lapply(seq_len(nrow(rows)), function(i) { h <- rows[i]
+        div(class = "bf-ev",
+          div(span(class = paste("bf-pill", h$severity), h$severity), " ",
+              if (h$level == "interviewer") span(class = "bf-pill iv", paste("Int.", fmt_i(h$interv))), " ",
+              tags$b(h$headline), " ", bf_chip(if (h$status == "persisting") sprintf("%s run in a row (since %s)", bf_nth(h$runs), format(h$since, "%d %b")) else h$status)),
+          div(class = "e", h$evidence),
+          if (!is.na(h$was) && h$status == "persisting" && h$was != h$headline) div(class = "e", style = "color:#7A5300", "Last run: ", h$was),
+          div(class = "a", icon("arrow-right"), sprintf(" %s (%s, %s)", h$action, h$owner, tolower(h$timing))))
+      })))
+  }
+  bf_issues <- reactive({ req(rv$sc); c <- rv$cmp %||% ipm_compare(rv$sc, list(), as.Date(NA)); s <- copy(c$issues)
+    s[, sev := match(severity, c("high", "medium"))]; s[, lev := match(level, c("team", "interviewer"))]; setorder(s, lev, sev); s })
+  observeEvent(input$bf_team, { s <- bf_issues()[level != "survey" & team == input$bf_team]
+    t <- rv$sc$teams[team == input$bf_team]
+    bf_evidence(s, sprintf("%s - %s priority: %d issue%s", t$team_label, t$priority, nrow(s), if (nrow(s) == 1) "" else "s")) })
+  observeEvent(input$bf_iv, { s <- bf_issues()[level == "interviewer" & interv == input$bf_iv]
+    bf_evidence(s, sprintf("Interviewer %s (%s)", fmt_i(input$bf_iv), s$team_label[1])) })
+  observeEvent(input$bf_forget, showModal(modalDialog(title = "Forget this survey's history?",
+    "The issues kept from earlier runs of this survey will be deleted; the next run starts a new history. Your current results stay.",
+    footer = tagList(modalButton("Cancel"), actionButton("bf_forget_ok", "Forget the history", class = "btn-danger")))))
+  observeEvent(input$bf_forget_ok, { removeModal(); req(rv$res); ipm_history_forget(rv$res); rv$cmp <- ipm_compare(rv$sc, list(), as.Date(NA))
+    showNotification("History deleted.", type = "message") })
+  output$bf_plan <- downloadHandler(filename = function() sprintf("team_action_plan_%s.docx", format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { req(rv$sc); ipm_plan_docx(rv$plan %||% ipm_plan_rules(rv$sc), f, rv$sc, rv$res$cfg$survey_name, rv$sc$survey$period) })
+
 
   # ---------- results: summary ----------
   output$kpis <- renderUI({
