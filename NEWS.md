@@ -1,3 +1,11 @@
+# ipmR 0.6.2.9004 (development version)
+
+**New app (phase 4b: team and interviewer pages, supervisor brief)**
+* New "Teams" page: one team at a time - priority, every issue with its figures, a bar comparing the team with its benchmark and the action; its interviewers (flags, interview length, completion, main issue); week-by-week charts of interview length, completion and children under 5 listed (team vs the other teams); and the modules where the team stands out (#61).
+* New "Interviewers" page: the interviewer's issues, interview length and completion per questionnaire vs the team and the survey, a week-by-week chart and the modules with the most flags (questionnaire problems left out) (#62).
+* Supervisor brief: one page per team for the supervisor - what to do this week, the team issues, the interviewers to observe and a trend chart. "Supervisor brief (Word)" on the team page; "Supervisor briefs (Word)" on the briefing gives all High and Medium teams. The full team action plan stays under Results (#63).
+* Briefing: click a team or interviewer to open its page; the evidence window shows the same bars and has an "Open the team page" button. `ipm_team_profile()`, `ipm_interviewer_profile()`, `ipm_trend_plot()`, `ipm_supervisor_brief()` (#64).
+
 # ipmR 0.6.2.9003 (development version)
 
 * Briefing: High priority teams are shown in full; Medium priority teams are one line each, under "N Medium priority teams" (click to open). The "Teams to act on" number says how many are high and medium (#58).

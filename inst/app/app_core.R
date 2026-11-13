@@ -232,6 +232,18 @@ ipm_ui <- page_navbar(
     .bf-legend span {display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
     .bf-line {font-size:0.86em; padding:6px 0; border-top:1px solid #eef0f3}
     .bf-kpi .s {font-size:0.75em; color:#5f6368; margin-top:2px}
+    .evbars {margin:6px 0 2px 0; max-width:420px}
+    .evb {display:grid; grid-template-columns:92px minmax(0, 1fr) 44px; gap:8px; align-items:center; font-size:0.75em; color:#5f6368; margin:2px 0}
+    .evb .t {background:#F3F4F6; border-radius:3px; height:9px; overflow:hidden} .evb .f {height:9px; border-radius:3px}
+    .evb .n {text-align:right; color:#1f2a44; font-weight:600}
+    .tp-head {display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; max-width:1280px; margin:18px auto 0 auto; padding:0 12px}
+    .tp-head .form-group {margin-bottom:0}
+    .tp-tbl {width:100%; border-collapse:collapse; font-size:0.84em}
+    .tp-tbl th {font-weight:500; color:#5f6368; text-align:left; padding:4px 6px; border-bottom:1px solid #e6e8ec}
+    .tp-tbl td {padding:6px; border-top:1px solid #eef0f3; vertical-align:top} .tp-tbl td.m {color:#5f6368}
+    .tp-tbl tr[onclick] {cursor:pointer} .tp-tbl tr[onclick]:hover td {background:#F5F9FF}
+    .tp-ct {font-size:0.8em; font-weight:600; color:#1f2a44; margin-top:6px}
+    .bf-pill.go {cursor:pointer}
     .bf-med {display:grid; grid-template-columns:118px minmax(0, 1fr) auto; gap:12px; align-items:center; padding:7px 0; border-top:1px solid #eef0f3; font-size:0.88em}
     @media (max-width: 600px) {.bf-med {grid-template-columns:minmax(0, 1fr)}}
     .bf-more summary {cursor:pointer; color:#2B3F87; font-size:0.86em; font-weight:600; padding:9px 0 4px 0; border-top:1px solid #eef0f3}
@@ -244,6 +256,13 @@ ipm_ui <- page_navbar(
 
   # ---------------- BRIEFING (home after a run) ----------------
   nav_panel(tagList(icon("bolt"), "Briefing"), value = "briefing", uiOutput("brief")),
+  nav_panel(tagList(icon("users"), "Teams"), value = "team",
+    div(class = "tp-head", selectInput("tp_team", NULL, choices = NULL, width = "340px"),
+        downloadButton("tp_brief", "Supervisor brief (Word)", class = "btn-sm btn-outline-primary")),
+    uiOutput("tp_body")),
+  nav_panel(tagList(icon("user"), "Interviewers"), value = "interv",
+    div(class = "tp-head", selectizeInput("ip_iv", NULL, choices = NULL, width = "340px")),
+    uiOutput("ip_body")),
 
   nav_menu(tagList(icon("sliders"), "Setup"), value = "setup",
   # ---------------- 1. DATA ----------------
@@ -852,7 +871,8 @@ ipm_server <- function(input, output, session) {
     hi <- b$teams[priority == "High"]; md <- b$teams[priority != "High"]
     team_rows <- lapply(seq_len(nrow(hi)), function(i) { h <- hi[i]
       div(class = "bf-item",
-        div(span(class = paste("bf-pill", tolower(h$priority)), sprintf("%s · %s", sub(" \\([^()]*\\)$", "", h$team_label), h$priority))),
+        div(span(class = paste("bf-pill go", tolower(h$priority)), title = "Open the team page", onclick = sprintf("Shiny.setInputValue('go_team', %d, {priority: 'event'})", h$team),
+                 sprintf("%s · %s", sub(" \\([^()]*\\)$", "", h$team_label), h$priority))),
         div(div(class = "bf-head", h$headline),
             div(class = "bf-sub", paste(c(if (h$more > 0) sprintf("+%d more team issue%s", h$more, if (h$more > 1) "s" else ""),
                                           if (nzchar(h$interviewers)) paste("interviewers", h$interviewers)), collapse = " · ")),
@@ -867,7 +887,8 @@ ipm_server <- function(input, output, session) {
     })
     iv_rows <- lapply(seq_len(nrow(b$interviewers)), function(i) { h <- b$interviewers[i]
       div(class = "bf-item",
-        div(span(class = "bf-pill iv", sprintf("Int. %s · %s", fmt_i(h$interv), sub(" \\([^()]*\\)$", "", h$team_label)))),
+        div(span(class = "bf-pill iv go", title = "Open the interviewer page", onclick = sprintf("Shiny.setInputValue('go_iv', %s, {priority: 'event'})", fmt_i(h$interv)),
+                 sprintf("Int. %s · %s", fmt_i(h$interv), sub(" \\([^()]*\\)$", "", h$team_label)))),
         div(div(class = "bf-head", h$headline), div(class = "bf-do", icon("arrow-right"), sprintf(" %s (%s, %s)", h$do, h$owner, tolower(h$timing)))),
         div(class = "bf-acts", bf_chip(h$status), bf_btn("bf_iv", h$interv)))
     })
@@ -901,7 +922,7 @@ ipm_server <- function(input, output, session) {
       div(class = "bf-top",
         div(div(class = "bf-meta", sprintf("%s · data up to %s · period of analysis %s", res$cfg$survey_name %||% "Survey", bf_date(last), b$survey$period %||% "-")),
             div(class = "bf-title", "Briefing"), div(class = "bf-meta", cmp_txt)),
-        div(downloadButton("bf_plan", "Action plan (Word)", class = "btn-sm btn-outline-primary"),
+        div(downloadButton("bf_plan", "Supervisor briefs (Word)", class = "btn-sm btn-outline-primary"),
             actionButton("bf_more", "All results", class = "btn-sm btn-outline-secondary", icon = icon("table")))),
       div(class = "bf-kpis", kpis),
       div(class = "bf-cols",
@@ -937,33 +958,156 @@ ipm_server <- function(input, output, session) {
   })
   observeEvent(input$bf_start, nav_to("data"))
   observeEvent(input$bf_more, { nav_to("results"); bslib::nav_select("restabs", "scorecard") })
-  bf_evidence <- function(rows, title) {
-    showModal(modalDialog(title = title, size = "l", easyClose = TRUE, footer = modalButton("Close"),
-      lapply(seq_len(nrow(rows)), function(i) { h <- rows[i]
-        div(class = "bf-ev",
-          div(span(class = paste("bf-pill", h$severity), h$severity), " ",
-              if (h$level == "interviewer") span(class = "bf-pill iv", paste("Int.", fmt_i(h$interv))), " ",
-              tags$b(h$headline), " ", bf_chip(if (h$status == "persisting") sprintf("%s run in a row (since %s)", bf_nth(h$runs), format(h$since, "%d %b")) else h$status)),
-          div(class = "e", h$evidence),
-          if (!is.na(h$was) && h$status == "persisting" && h$was != h$headline) div(class = "e", style = "color:#7A5300", "Last run: ", h$was),
-          div(class = "a", icon("arrow-right"), sprintf(" %s (%s, %s)", h$action, h$owner, tolower(h$timing))))
-      })))
+  bf_evidence <- function(rows, title, page = NULL) {
+    showModal(modalDialog(title = title, size = "l", easyClose = TRUE, footer = tagList(page, modalButton("Close")),
+      lapply(seq_len(nrow(rows)), function(i) ev_item(rows[i]))))
   }
   bf_issues <- reactive({ req(rv$sc); c <- rv$cmp %||% ipm_compare(rv$sc, list(), as.Date(NA)); s <- copy(c$issues)
     s[, sev := match(severity, c("high", "medium"))]; s[, lev := match(level, c("team", "interviewer"))]; setorder(s, lev, sev); s })
   observeEvent(input$bf_team, { s <- bf_issues()[level != "survey" & team == input$bf_team]
     t <- rv$sc$teams[team == input$bf_team]
-    bf_evidence(s, sprintf("%s - %s priority: %d issue%s", t$team_label, t$priority, nrow(s), if (nrow(s) == 1) "" else "s")) })
+    bf_evidence(s, sprintf("%s - %s priority: %d issue%s", t$team_label, t$priority, nrow(s), if (nrow(s) == 1) "" else "s"),
+                tags$button(class = "btn btn-primary", onclick = sprintf("Shiny.setInputValue('go_team', %d, {priority: 'event'})", t$team), "Open the team page")) })
   observeEvent(input$bf_iv, { s <- bf_issues()[level == "interviewer" & interv == input$bf_iv]
-    bf_evidence(s, sprintf("Interviewer %s (%s)", fmt_i(input$bf_iv), s$team_label[1])) })
+    bf_evidence(s, sprintf("Interviewer %s (%s)", fmt_i(input$bf_iv), s$team_label[1]),
+                tags$button(class = "btn btn-primary", onclick = sprintf("Shiny.setInputValue('go_iv', %s, {priority: 'event'})", fmt_i(input$bf_iv)), "Open the interviewer page")) })
   observeEvent(input$bf_forget, showModal(modalDialog(title = "Forget this survey's history?",
     "The issues kept from earlier runs of this survey will be deleted; the next run starts a new history. Your current results stay.",
     footer = tagList(modalButton("Cancel"), actionButton("bf_forget_ok", "Forget the history", class = "btn-danger")))))
   observeEvent(input$bf_forget_ok, { removeModal(); req(rv$res); ipm_history_forget(rv$res); rv$cmp <- ipm_compare(rv$sc, list(), as.Date(NA))
     showNotification("History deleted.", type = "message") })
-  output$bf_plan <- downloadHandler(filename = function() sprintf("team_action_plan_%s.docx", format(Sys.Date(), "%Y%m%d")),
-    content = function(f) { req(rv$sc); ipm_plan_docx(rv$plan %||% ipm_plan_rules(rv$sc), f, rv$sc, rv$res$cfg$survey_name, rv$sc$survey$period) })
+  output$bf_plan <- downloadHandler(filename = function() sprintf("supervisor_briefs_%s.docx", format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { req(rv$sc); ipm_supervisor_brief(rv$res, rv$sc, f, cmp = rv$cmp) })
 
+
+  # ---------- team and interviewer pages ----------
+  short_lbl <- function(x) sub(" \\([^()]*\\)$", "", x)
+  fmt_n <- function(x) ifelse(is.na(x), "-", ifelse(abs(x) >= 10, sprintf("%.0f", x), sprintf("%.1f", x)))
+  # value vs benchmark as two small bars
+  ev_bars <- function(v, bm, lv = "This", lb = "Comparison") {
+    if (is.na(v) || is.na(bm) || max(abs(c(v, bm))) == 0) return(NULL)
+    m <- max(abs(c(v, bm)))
+    row <- function(l, x, col) div(class = "evb", span(class = "l", l), div(class = "t", div(class = "f", style = sprintf("width:%.0f%%;background:%s", 100 * abs(x) / m, col))), span(class = "n", fmt_n(x)))
+    div(class = "evbars", row(lv, v, "#1CABE2"), row(lb, bm, "#B8BEC6"))
+  }
+  ev_item <- function(h) {
+    st <- if (is.na(h$status)) NA else if (h$status == "persisting") sprintf("%s run in a row (since %s)", bf_nth(h$runs), format(h$since, "%d %b")) else h$status
+    div(class = "bf-ev",
+      div(span(class = paste("bf-pill", h$severity), h$severity), " ",
+          if (h$level == "interviewer") span(class = "bf-pill iv", style = "cursor:pointer", onclick = sprintf("Shiny.setInputValue('go_iv', %s, {priority: 'event'})", fmt_i(h$interv)),
+                                             paste("Int.", fmt_i(h$interv))), " ",
+          tags$b(h$headline), " ", bf_chip(st)),
+      ev_bars(h$value, h$benchmark, if (h$level == "interviewer") "Interviewer" else "Team", if (h$type %in% c("heaping")) "Expected" else if (h$level == "interviewer") "Team / survey" else "Others / survey"),
+      div(class = "e", h$evidence),
+      if (!is.na(h$was) && identical(h$status, "persisting") && h$was != h$headline) div(class = "e", style = "color:#7A5300", "Last run: ", h$was),
+      div(class = "a", icon("arrow-right"), sprintf(" %s (%s, %s)", h$action, h$owner, tolower(h$timing))))
+  }
+  go_team <- function(t) { updateSelectInput(session, "tp_team", selected = t); nav_to("team"); removeModal() }
+  go_iv <- function(i) { updateSelectizeInput(session, "ip_iv", selected = i); nav_to("interv"); removeModal() }
+  observeEvent(input$go_team, go_team(input$go_team))
+  observeEvent(input$go_iv, go_iv(input$go_iv))
+
+  all_ivs <- reactive({ req(rv$sc, rv$res); sc <- rv$sc; o <- rv$res$outputs
+    x <- unique(rbindlist(list(if (!is.null(sc$interviewers)) sc$interviewers[, .(team, interv)], if (!is.null(o$quesmtimes$data)) o$quesmtimes$data[, .(team, interv)],
+                               if (!is.null(o$quescrates$data)) o$quescrates$data[, .(team, interv)])))[!is.na(team) & !is.na(interv)]
+    x <- x[, .(team = team[1]), by = interv]
+    s <- sc$signals[level == "interviewer", .(n = .N, high = sum(severity == "high")), by = interv]
+    x[, `:=`(n = s$n[match(interv, s$interv)], high = s$high[match(interv, s$interv)], team_label = sc$teams$team_label[match(team, sc$teams$team)])]
+    x[is.na(n), `:=`(n = 0L, high = 0L)]
+    x[, r := fifelse(high > 0, 1L, fifelse(n > 0, 2L, 3L))]
+    setorder(x, r, team, interv)[] })
+  observe({
+    sc <- rv$sc
+    if (is.null(sc)) { updateSelectInput(session, "tp_team", choices = character()); updateSelectizeInput(session, "ip_iv", choices = character()); return() }
+    tc <- stats::setNames(as.character(sc$teams$team), sprintf("%s · %s priority", sc$teams$team_label, sc$teams$priority))
+    updateSelectInput(session, "tp_team", choices = tc, selected = if (isTRUE(isolate(input$tp_team) %in% tc)) isolate(input$tp_team) else tc[1])
+    a <- all_ivs()
+    ic <- stats::setNames(fmt_i(a$interv), sprintf("%s · %s%s", fmt_i(a$interv), short_lbl(a$team_label),
+                                                   ifelse(a$high > 0, sprintf(" · %d high issue%s", a$high, ifelse(a$high > 1, "s", "")), ifelse(a$n > 0, sprintf(" · %d issue%s", a$n, ifelse(a$n > 1, "s", "")), ""))))
+    updateSelectizeInput(session, "ip_iv", choices = ic, selected = if (isTRUE(isolate(input$ip_iv) %in% ic)) isolate(input$ip_iv) else ic[1], server = FALSE)
+  })
+
+  tp_prof <- reactive({ req(rv$sc, input$tp_team); tryCatch(ipm_team_profile(rv$res, rv$sc, input$tp_team, rv$cmp), error = function(e) NULL) })
+  ip_prof <- reactive({ req(rv$sc, input$ip_iv); tryCatch(ipm_interviewer_profile(rv$res, rv$sc, input$ip_iv, rv$cmp), error = function(e) NULL) })
+  no_run <- function() div(class = "bf bf-empty", tags$h3("This page fills in after a run"), actionButton("bf_start2", "Load the data", class = "btn-primary"))
+  observeEvent(input$bf_start2, nav_to("data"))
+  trend_card <- function(prefix, p) {
+    if (!length(p$trends)) return(NULL)
+    div(class = "bf-card", tags$h4("Week by week"),
+        div(class = "hint", sprintf("Whole fieldwork; questionnaire %s for interview length and completion.", p$questionnaire %||% "-")),
+        lapply(names(p$trends), function(k) div(div(class = "tp-ct", .int$trend_titles[[k]] %||% k), plotOutput(paste0(prefix, k), height = "170px"))))
+  }
+  for (k in c("minutes", "completion", "under5")) local({ k <- k
+    output[[paste0("tp_plot_", k)]] <- renderPlot({ p <- tp_prof(); req(p, p$trends[[k]]); ipm_trend_plot(p$trends[[k]]) }, res = 96)
+    output[[paste0("ip_plot_", k)]] <- renderPlot({ p <- ip_prof(); req(p, p$trends[[k]]); ipm_trend_plot(p$trends[[k]]) }, res = 96)
+  })
+  mod_bars <- function(m, lv, lb) {
+    if (is.null(m) || !nrow(m)) return(div(class = "bf-line", "No module stands out."))
+    lapply(seq_len(nrow(m)), function(i) { h <- m[i]
+      div(class = "bf-line", tags$b(sprintf("%s %s", h$dataset, h$module)), span(style = "color:#5f6368", sprintf("  %d of %d tests flagged%s", h$flags, h$tests,
+            if (!is.null(h$questions) && nzchar(h$questions %||% "")) paste0(" - ", h$questions) else if (!is.null(h$interviewers_flagged)) paste0(" - interviewers ", h$interviewers_flagged) else "")),
+          ev_bars(h$rate, h$module_rate, lv, lb)) })
+  }
+
+  output$tp_body <- renderUI({
+    if (is.null(rv$sc)) return(no_run())
+    p <- tp_prof(); req(p); t <- p$team; s <- p$issues; iv <- p$interviewers; sv <- p$survey
+    kpi <- function(l, v, sub = NULL) div(class = "bf-kpi", div(class = "l", l), div(class = "v", v), if (!is.null(sub)) div(class = "s", sub))
+    ivt <- tags$table(class = "tp-tbl",
+      tags$tr(tags$th("Interviewer"), tags$th("Issues"), tags$th("Flags"), tags$th(sprintf("Length (%s)", p$questionnaire)), tags$th("Completion"), tags$th("Main issue")),
+      lapply(seq_len(nrow(iv)), function(i) { h <- iv[i]
+        tags$tr(onclick = sprintf("Shiny.setInputValue('go_iv', %s, {priority: 'event'})", fmt_i(h$interv)),
+          tags$td(tags$b(fmt_i(h$interv))),
+          tags$td(if (h$high > 0) span(class = "bf-pill high", h$issues) else if (h$issues > 0) span(class = "bf-pill medium", h$issues) else span(style = "color:#9aa0a6", "-")),
+          tags$td(if (is.na(h$flag_rate)) "-" else sprintf("%.1f%%", h$flag_rate)), tags$td(if (is.na(h$minutes)) "-" else sprintf("%.0f min", h$minutes)),
+          tags$td(if (is.na(h$completion)) "-" else sprintf("%.0f%%", h$completion)), tags$td(class = "m", h$top %||% "")) }))
+    div(class = "bf",
+      div(class = "bf-kpis",
+          kpi("Priority", span(class = paste("bf-pill", tolower(t$priority)), style = "font-size:0.5em;vertical-align:middle", t$priority), sprintf("%s warning points", fmt_n(t$points))),
+          kpi("Issues", nrow(s), sprintf("%d high · %d team · %d interviewer", sum(s$severity == "high"), sum(s$level == "team"), sum(s$level == "interviewer"))),
+          kpi("Questions flagged", if (is.na(t$rate_excl)) "-" else sprintf("%.1f%%", t$rate_excl), if (!is.null(sv$flag_rate_excl)) sprintf("survey %.1f%% (questionnaire problems left out)", sv$flag_rate_excl)),
+          kpi("Interviewers", nrow(iv), sprintf("%d with an issue", sum(iv$issues > 0)))),
+      div(class = "bf-cols",
+        div(class = "bf-card", tags$h4(sprintf("Issues (%d)", nrow(s))),
+                div(class = "hint", "Team issues first, then interviewers; the bars compare the team or interviewer with its benchmark. Click an interviewer for their page."),
+                if (nrow(s)) lapply(seq_len(nrow(s)), function(i) ev_item(s[i])) else div(class = "bf-line", "No issue found for this team.")),
+        div(div(class = "bf-card", tags$h4("Interviewers"), div(class = "hint", sprintf("Flags: share of questions flagged (period of analysis). Length and completion: last %d weeks. Click a row for the interviewer's page.", p$recent_weeks)), ivt),
+            trend_card("tp_plot_", p),
+            div(class = "bf-card", tags$h4("Modules where the team stands out"),
+                div(class = "hint", "Share of the team's tests flagged (blue) vs the other teams (grey); questions flagged in most teams left out."),
+                mod_bars(p$modules, "Team", "Others")))))
+  })
+  output$tp_brief <- downloadHandler(filename = function() sprintf("supervisor_brief_T%s_%s.docx", input$tp_team, format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { req(rv$sc, input$tp_team); ipm_supervisor_brief(rv$res, rv$sc, f, teams = as.integer(input$tp_team), cmp = rv$cmp) })
+
+  output$ip_body <- renderUI({
+    if (is.null(rv$sc)) return(no_run())
+    p <- ip_prof(); req(p); h <- p$interviewer; s <- p$issues; fg <- p$figures
+    kpi <- function(l, v, sub = NULL) div(class = "bf-kpi", div(class = "l", l), div(class = "v", v), if (!is.null(sub)) div(class = "s", sub))
+    figt <- if (!is.null(fg) && nrow(fg)) tags$table(class = "tp-tbl",
+      tags$tr(tags$th(""), tags$th("Questionnaire"), tags$th("Interviewer"), tags$th("Team"), tags$th("Survey"), tags$th("Interviews")),
+      lapply(seq_len(nrow(fg)), function(i) { x <- fg[i]; u <- if (x$what == "minutes") " min" else "%"
+        low <- !is.na(x$interviewer) && !is.na(x$survey) && x$interviewer < (if (x$what == "minutes") 0.6 else 0.9) * x$survey
+        tags$tr(tags$td(if (x$what == "minutes") "Length" else "Completion"), tags$td(x$dataset),
+                tags$td(style = if (low) "color:#C4161C;font-weight:600", paste0(fmt_n(x$interviewer), u)), tags$td(paste0(fmt_n(x$team), u)), tags$td(paste0(fmt_n(x$survey), u)), tags$td(x$n)) }))
+    div(class = "bf",
+      div(class = "bf-kpis",
+          kpi("Team", actionLink("ip_team", short_lbl(h$team_label)), "open the team page"),
+          kpi("Issues", nrow(s), sprintf("%d high", sum(s$severity == "high"))),
+          kpi("Questions flagged", if (is.na(h$flag_rate)) "-" else sprintf("%.1f%%", h$flag_rate),
+              sprintf("team %s · survey %s", if (is.na(h$team_rate)) "-" else sprintf("%.1f%%", h$team_rate), if (is.na(h$survey_rate)) "-" else sprintf("%.1f%%", h$survey_rate))),
+          kpi("Tests", if (is.na(h$tests)) "-" else format(h$tests, big.mark = ","), "flag tests in the period of analysis")),
+      div(class = "bf-cols",
+        div(div(class = "bf-card", tags$h4(sprintf("Issues (%d)", nrow(s))),
+                if (nrow(s)) lapply(seq_len(nrow(s)), function(i) ev_item(s[i])) else div(class = "bf-line", "No issue found for this interviewer.")),
+            div(class = "bf-card", tags$h4("Length and completion"), div(class = "hint", sprintf("Last %d weeks; red when well below the survey.", p$recent_weeks)),
+                figt %||% div(class = "bf-line", "No interview times or results found."))),
+        div(trend_card("ip_plot_", p),
+            div(class = "bf-card", tags$h4("Modules with the most flags"),
+                div(class = "hint", "Share of the interviewer's tests flagged (blue) vs all interviewers (grey); questions flagged in most teams left out."),
+                mod_bars(p$modules, "Interviewer", "All")))))
+  })
+  observeEvent(input$ip_team, { p <- ip_prof(); req(p); go_team(p$interviewer$team) })
 
   # ---------- results: summary ----------
   output$kpis <- renderUI({
