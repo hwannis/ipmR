@@ -1,3 +1,11 @@
+# ipmR 0.6.2.9005 (development version)
+
+**New app (phase 4c: follow-up, questionnaire page, AI on each page, polish)**
+* Follow-up of each issue: "Follow up" sets it to assigned (to whom), done or escalated, with a note. It is kept with the run history of the survey and shown on the issue at the next runs; an issue set to done that is still found at the next export is shown as "Done on 12 Nov but still found", and listed on the briefing. The briefing shows the follow-up of each team. `ipm_actions()`, `ipm_action_set()`, `ipm_action_status()` (#65).
+* New "Questionnaire" page: questions (or modules) x teams, coloured by the share of tests flagged - a row dark in most teams is a questionnaire problem, a row dark in one or two teams is a team problem; point at a cell for the figures and the interviewers flagged, click to open the team. Option to hide the questions flagged in most teams. `ipm_question_heat()` (#66).
+* Ask the AI from the team, interviewer and questionnaire pages: the question is asked about that team, interviewer or the questionnaire, with suggested questions; answers stay on the page. Uses the AI connection set under Results > Action plan (AI) (#67).
+* Dark mode (switch in the top bar); phone layout (short title, cards two by two, tables scroll); one colour for medium priority everywhere; "Run now with these settings" on the data page, so a routine run is: drop the data, check the name, run (#68).
+
 # ipmR 0.6.2.9004 (development version)
 
 **New app (phase 4b: team and interviewer pages, supervisor brief)**

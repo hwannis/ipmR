@@ -103,7 +103,7 @@ AI_CHOICES <- c(if (length(AI_CONNS)) stats::setNames(names(AI_CONNS), vapply(AI
                 if (AI_CUSTOM) c("My own connection (this session only)" = "custom"))
 if (!length(AI_CHOICES)) AI_CHOICES <- c("No AI model configured on this server" = "")
 fmt_i <- function(x) format(x, scientific = FALSE, trim = TRUE)
-prio_col <- c(High = "#E2231A", Medium = "#F26A21", Low = "#8A8A8A")   # Low = grey: nothing major found, not "fine"
+prio_col <- c(High = "#E2231A", Medium = "#F28C28", Low = "#8A8A8A")   # Low = grey: nothing major found, not "fine"
 md_html <- function(x) {
   x <- gsub("<", "&lt;", x %||% "", fixed = TRUE)                     # model output is never trusted as HTML
   if (requireNamespace("commonmark", quietly = TRUE)) HTML(commonmark::markdown_html(x, extensions = TRUE)) else tags$pre(style = "white-space:pre-wrap", x)
@@ -164,7 +164,7 @@ idle_js <- sprintf("
 
 
 ipm_ui <- page_navbar(
-  title = tags$span(tags$b("IPM"), " Interviewer Performance Monitoring for MICS",
+  title = tags$span(tags$b("IPM"), tags$span(class = "ttl-long", " Interviewer Performance Monitoring for MICS"),
                     tags$span(style = "font-size:0.7em; opacity:0.85; margin-left:10px", paste0("ipmR ", .int$version %||% ""))),
   theme = theme, id = "nav", fillable = FALSE, bg = cyan, inverse = TRUE, selected = "data",
   header = tags$head(tags$script(HTML(idle_js)), tags$style(HTML("
@@ -227,7 +227,7 @@ ipm_ui <- page_navbar(
     .bf-grid th {font-weight:500; color:#5f6368; text-align:center; padding:0 2px; line-height:1.1}
     .bf-grid td.t {white-space:nowrap; padding-right:6px; cursor:pointer; color:#1f2a44}
     .bf-grid td.c {height:20px; border-radius:4px; background:#F3F4F6; cursor:pointer; text-align:center; color:white; font-size:0.85em}
-    .bf-grid td.c.s1 {background:#E2231A} .bf-grid td.c.s2 {background:#F6B26B} .bf-grid td.c.p {outline:2px solid #1f2a44; outline-offset:-2px}
+    .bf-grid td.c.s1 {background:#E2231A} .bf-grid td.c.s2 {background:#F28C28} .bf-grid td.c.p {outline:2px solid #1f2a44; outline-offset:-2px}
     .bf-legend {font-size:0.75em; color:#5f6368; margin-top:6px}
     .bf-legend span {display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
     .bf-line {font-size:0.86em; padding:6px 0; border-top:1px solid #eef0f3}
@@ -244,6 +244,48 @@ ipm_ui <- page_navbar(
     .tp-tbl tr[onclick] {cursor:pointer} .tp-tbl tr[onclick]:hover td {background:#F5F9FF}
     .tp-ct {font-size:0.8em; font-weight:600; color:#1f2a44; margin-top:6px}
     .bf-pill.go {cursor:pointer}
+    :root {--heat0:#F7F8FA}
+    .act {font-size:0.74em; padding:2px 8px; border-radius:20px; white-space:nowrap}
+    .act-open {background:#F1F2F4; color:#5f6368} .act-asg {background:#E6F4FB; color:#0B5A75} .act-done {background:#E7F5EC; color:#0B6B33}
+    .act-esc {background:#EFE7FB; color:#5B2A9A} .act-warn {background:#FDE8E7; color:#A3120F; font-weight:600}
+    .actbar {display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:6px}
+    .actbar .btn {font-size:0.74em; padding:1px 9px; border-radius:6px}
+    .actnote {font-size:0.78em; color:#5f6368; font-style:italic}
+    .bf-acts-sum {font-size:0.76em; color:#5f6368; margin-top:4px}
+    .qh-wrap {overflow-x:auto; margin-top:8px}
+    .qh {border-collapse:separate; border-spacing:2px; font-size:0.78em}
+    .qh th {font-weight:500; color:#5f6368; padding:2px 3px; white-space:nowrap}
+    .qh th.tm {writing-mode:vertical-rl; transform:rotate(180deg); text-align:left; cursor:pointer; height:64px; vertical-align:bottom}
+    .qh th.tm .dot {display:inline-block; width:6px; height:6px; border-radius:50%; margin-bottom:3px}
+    .qh td.lab {white-space:nowrap; padding-right:8px; min-width:150px} .qh td.lab .d, .qh td.tot .d {color:#5f6368; font-size:0.9em; white-space:nowrap}
+    .qh td.tot {text-align:right; padding-right:8px; white-space:nowrap}
+    .qh td.c {width:20px; min-width:18px; height:20px; border-radius:3px; cursor:pointer}
+    .qh td.c.na, .qh-legend .sw.na {background:repeating-linear-gradient(45deg, transparent, transparent 3px, #e3e5e8 3px, #e3e5e8 5px)}
+    .qh-legend {font-size:0.75em; color:#5f6368; display:flex; align-items:center; gap:4px; flex-wrap:wrap}
+    .qh-legend .sw {display:inline-block; width:16px; height:12px; border-radius:2px}
+    .aibox .sugg {display:flex; gap:6px; flex-wrap:wrap; margin:6px 0}
+    .aibox .sugg .btn {font-size:0.76em; border-radius:16px; padding:2px 10px}
+    .aibox .aiq {display:flex; gap:8px; align-items:flex-start} .aibox .aiq .form-group {flex:1; margin-bottom:0}
+    @media (max-width: 768px) {.ttl-long {display:none} .navbar-brand {white-space:normal}}
+    @media (max-width: 600px) {.bf-kpis {grid-template-columns:repeat(2, minmax(0, 1fr))} .bf-kpi .v {font-size:1.5em} .bf {padding:4px 2px 24px 2px}
+      .tp-head .form-group, .tp-head .selectize-control {width:100% !important} .tp-tbl {display:block; overflow-x:auto} .evb {grid-template-columns:70px minmax(0, 1fr) 40px}}
+    [data-bs-theme=dark] {--heat0:#2a2f36}
+    [data-bs-theme=dark] body {background:#14171c}
+    [data-bs-theme=dark] .bf-card, [data-bs-theme=dark] .bf-kpi {background:#1c2027; border-color:#2e333b}
+    [data-bs-theme=dark] .bf-title, [data-bs-theme=dark] .bf-kpi .v, [data-bs-theme=dark] .bf-head, [data-bs-theme=dark] .bf-card h4, [data-bs-theme=dark] .tp-ct,
+      [data-bs-theme=dark] .bf-grid td.t, [data-bs-theme=dark] .evb .n {color:#e8eaed}
+    [data-bs-theme=dark] .bf-meta, [data-bs-theme=dark] .bf-kpi .l, [data-bs-theme=dark] .bf-kpi .s, [data-bs-theme=dark] .hint, [data-bs-theme=dark] .bf-sub,
+      [data-bs-theme=dark] .bf-ev .e, [data-bs-theme=dark] .tp-tbl td.m, [data-bs-theme=dark] .small-note {color:#a8adb4}
+    [data-bs-theme=dark] .bf-do, [data-bs-theme=dark] .bf-ev .a {color:#8fb4ff}
+    [data-bs-theme=dark] .bf-item, [data-bs-theme=dark] .bf-line, [data-bs-theme=dark] .bf-med, [data-bs-theme=dark] .bf-ev, [data-bs-theme=dark] .tp-tbl td,
+      [data-bs-theme=dark] .bf-more summary {border-color:#2e333b}
+    [data-bs-theme=dark] .bf-grid td.c, [data-bs-theme=dark] .evb .t {background:#2a2f36}
+    [data-bs-theme=dark] .bf-grid td.c.s1 {background:#E2231A} [data-bs-theme=dark] .bf-grid td.c.s2 {background:#F28C28}
+    [data-bs-theme=dark] .bf-grid td.c.p {outline-color:#e8eaed}
+    [data-bs-theme=dark] .tp-tbl tr[onclick]:hover td {background:#232833}
+    [data-bs-theme=dark] .ipm-explain {background:#16242c} [data-bs-theme=dark] .howto {background:#1b1e2b}
+    [data-bs-theme=dark] .name-box {background:#2b2614; border-color:#6b5a1e}
+    [data-bs-theme=dark] .shiny-plot-output img {border-radius:6px}
     .bf-med {display:grid; grid-template-columns:118px minmax(0, 1fr) auto; gap:12px; align-items:center; padding:7px 0; border-top:1px solid #eef0f3; font-size:0.88em}
     @media (max-width: 600px) {.bf-med {grid-template-columns:minmax(0, 1fr)}}
     .bf-more summary {cursor:pointer; color:#2B3F87; font-size:0.86em; font-weight:600; padding:9px 0 4px 0; border-top:1px solid #eef0f3}
@@ -263,6 +305,11 @@ ipm_ui <- page_navbar(
   nav_panel(tagList(icon("user"), "Interviewers"), value = "interv",
     div(class = "tp-head", selectizeInput("ip_iv", NULL, choices = NULL, width = "340px")),
     uiOutput("ip_body")),
+  nav_panel(tagList(icon("table-cells"), "Questionnaire"), value = "quest",
+    div(class = "tp-head", radioButtons("qh_by", NULL, c("Questions" = "question", "Modules" = "module"), inline = TRUE),
+        selectInput("qh_top", NULL, c("20 with the most flags" = 20, "40 with the most flags" = 40, "80 with the most flags" = 80), selected = 40, width = "220px"),
+        checkboxInput("qh_hide", "Hide those flagged in most teams (questionnaire problems)", FALSE)),
+    uiOutput("qh_body")),
 
   nav_menu(tagList(icon("sliders"), "Setup"), value = "setup",
   # ---------------- 1. DATA ----------------
@@ -437,6 +484,8 @@ ipm_ui <- page_navbar(
         br(), br(),
         downloadButton("dl_report", "Download IPM_report.docx"), downloadButton("dl_zip", "Download all results (.zip)")))),
 
+  nav_spacer(),
+  nav_item(input_dark_mode(id = "dark_mode", mode = "light")),
   nav_panel("Guide", value = "guide",
     card(card_header("About the Interviewer Performance Monitoring (IPM)"),
       p("The IPM complements the MICS field check tables. While fieldwork is going on, it compares the work of each interviewer with that of his/her team-mates, who work in the same clusters at the same time and should therefore record similar answers. Large differences point to interviewers who may need support (or to questions that are not well understood) while there is still time to fix them."),
@@ -457,7 +506,7 @@ ipm_server <- function(input, output, session) {
   sdir <- file.path(tempdir(), paste0("ipm_", session$token)); dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
   upload_dirs <- character()                       # Shiny's own temporary copies of uploaded files
   rv <- reactiveValues(cfg = NULL, light = NULL, res = NULL, log = character(), report = NULL, zip = NULL, n_files = 0,
-                       sc = NULL, cmp = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
+                       sc = NULL, cmp = NULL, acts_tick = 0, act_key = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
   cleanup <- function() {
     if (exists("kill_jobs")) kill_jobs()
     wipe(c(sdir, upload_dirs))
@@ -609,7 +658,10 @@ ipm_server <- function(input, output, session) {
     req(rv$cfg)
     div(class = "name-box",
         textInput("survey_name_d", tagList(tags$b("Name of the survey"), " - shown on the briefing and the reports, and used to keep the run history of this survey apart from others"),
-                  value = isolate(input$survey_name) %||% "", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"))
+                  value = isolate(input$survey_name) %||% "", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"),
+        div(style = "display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 10px 0",
+            actionButton("run_quick", tagList(icon("play"), " Run now with these settings"), class = "btn-primary"),
+            span(class = "small-note", "or check the setup steps first (Setup menu: period, outputs, teams, flag settings).")))
   })
   observeEvent(input$survey_name_d, if (!identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name", value = input$survey_name_d))
   observeEvent(input$survey_name, if (!is.null(input$survey_name_d) && !identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name_d", value = input$survey_name))
@@ -826,7 +878,8 @@ ipm_server <- function(input, output, session) {
   })
 
   # ---------- run ----------
-  observeEvent(input$run, {
+  observeEvent(input$run, do_run())
+  do_run <- function() {
     req(rv$cfg); if (job_running("run")) { showNotification("The analysis is already running.", type = "warning"); return() }
     cfg <- collect_cfg(); rv$log <- character(); rv$report <- NULL; rv$zip <- NULL
     rv$res <- NULL; rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); gc(verbose = FALSE)
@@ -837,7 +890,7 @@ ipm_server <- function(input, output, session) {
         rv$cmp <- if (!is.null(r$sc)) tryCatch(ipm_history_update(r$res, r$sc), error = function(e) { logm("Run history:", conditionMessage(e)); NULL })
         rv$sc <- r$sc; rv$res <- r$res; logm("Done."); nav_to(if (!is.null(r$sc)) "briefing" else "results")
       })
-  })
+  }
   output$log <- renderText(paste(rev(rv$log), collapse = "\n"))
 
   # ---------- briefing (home page after a run) ----------
@@ -855,6 +908,15 @@ ipm_server <- function(input, output, session) {
       p(style = "color:#5f6368", "Load the latest data export, check the settings and click Run. You then see what to act on this week, and - from the second run of the same survey - what is new, what persists and what was resolved."),
       actionButton("bf_start", "Load the data", class = "btn-primary")))
     b <- brief(); res <- rv$res; ds <- res$data_summary
+    ai_all <- with_act(cur_issues())
+    act_sum <- function(t) { if (is.null(ai_all$action)) return(NULL)
+      x <- ai_all[level != "survey" & team == t]; if (!nrow(x)) return(NULL)
+      n <- c(done = sum(x$action == "done" & !x$still_found), assigned = sum(x$action == "assigned"), escalated = sum(x$action == "escalated"), still = sum(x$still_found))
+      if (!sum(n)) return(div(class = "bf-acts-sum", sprintf("Follow-up: none recorded for its %d issue%s", nrow(x), if (nrow(x) > 1) "s" else "")))
+      div(class = "bf-acts-sum", "Follow-up: ", paste(c(if (n[["done"]]) paste(n[["done"]], "done"), if (n[["assigned"]]) paste(n[["assigned"]], "assigned"),
+                                                       if (n[["escalated"]]) paste(n[["escalated"]], "escalated")), collapse = " · "),
+          if (n[["still"]]) span(class = "act act-warn", style = "margin-left:6px", sprintf("%d done but still found", n[["still"]]))) }
+    still <- if (!is.null(ai_all$still_found)) ai_all[still_found == TRUE] else ai_all[0]
     last <- suppressWarnings(max(as.Date(ds$last_day), na.rm = TRUE))
     cmp_txt <- if (!is.null(b$previous)) sprintf("Compared with the export of %s (%d earlier run%s kept)", bf_date(b$previous$data_last), b$runs, if (b$runs > 1) "s" else "")
                else if (!is.null(rv$cmp$saved)) "First run kept for this survey: the next run will show what is new, persisting and resolved"
@@ -876,7 +938,8 @@ ipm_server <- function(input, output, session) {
         div(div(class = "bf-head", h$headline),
             div(class = "bf-sub", paste(c(if (h$more > 0) sprintf("+%d more team issue%s", h$more, if (h$more > 1) "s" else ""),
                                           if (nzchar(h$interviewers)) paste("interviewers", h$interviewers)), collapse = " · ")),
-            div(class = "bf-do", icon("arrow-right"), sprintf(" %s (%s, %s)", h$do, h$owner, tolower(h$timing)))),
+            div(class = "bf-do", icon("arrow-right"), sprintf(" %s (%s, %s)", h$do, h$owner, tolower(h$timing))),
+            act_sum(h$team)),
         div(class = "bf-acts", bf_chip(h$status, h$prev_priority, h$priority), bf_btn("bf_team", h$team)))
     })
     med_rows <- lapply(seq_len(nrow(md)), function(i) { h <- md[i]
@@ -941,9 +1004,13 @@ ipm_server <- function(input, output, session) {
           div(class = "bf-card", tags$h4("Team health"),
               div(class = "hint", "Worst issue of each team in each area (team or interviewer level). Point at a cell for the details, click a team for the evidence."),
               grid,
-              div(class = "bf-legend", span(style = "background:#E2231A"), "high", span(style = "background:#F6B26B"), "medium",
+              div(class = "bf-legend", span(style = "background:#E2231A"), "high", span(style = "background:#F28C28"), "medium",
                   span(style = "background:#F3F4F6"), "nothing found",
                   if (!is.null(b$previous)) tagList(span(style = "outline:2px solid #1f2a44;outline-offset:-2px;background:white"), "also at the last run"))),
+          if (nrow(still)) div(class = "bf-card", style = "border-color:#F4B4B0", tags$h4(sprintf("Done but still found (%d)", nrow(still))),
+              div(class = "hint", "Set to Done on an earlier export, still found in this one: check that the action was really carried out, or escalate."),
+              lapply(seq_len(nrow(still)), function(i) { h <- still[i]
+                div(class = "bf-line", tags$b(if (is.na(h$team)) "Survey" else if (h$level == "interviewer") sprintf("Int. %s", fmt_i(h$interv)) else short_lbl(h$team_label)), " ", h$headline, act_bar(h)) })),
           div(class = "bf-card", tags$h4(sprintf("Questionnaire problems (%d)", nrow(q))),
               div(class = "hint", "Questions flagged in most teams: check wording, translation and CAPI routing, and send one note to all teams. Not counted against teams."),
               if (!is.null(qmods)) lapply(seq_len(min(nrow(qmods), 6)), function(i) div(class = "bf-line", tags$b(sprintf("%s %s", qmods$dataset[i], qmods$module[i])), " ",
@@ -962,7 +1029,7 @@ ipm_server <- function(input, output, session) {
     showModal(modalDialog(title = title, size = "l", easyClose = TRUE, footer = tagList(page, modalButton("Close")),
       lapply(seq_len(nrow(rows)), function(i) ev_item(rows[i]))))
   }
-  bf_issues <- reactive({ req(rv$sc); c <- rv$cmp %||% ipm_compare(rv$sc, list(), as.Date(NA)); s <- copy(c$issues)
+  bf_issues <- reactive({ req(rv$sc); s <- with_act(cur_issues())
     s[, sev := match(severity, c("high", "medium"))]; s[, lev := match(level, c("team", "interviewer"))]; setorder(s, lev, sev); s })
   observeEvent(input$bf_team, { s <- bf_issues()[level != "survey" & team == input$bf_team]
     t <- rv$sc$teams[team == input$bf_team]
@@ -972,7 +1039,7 @@ ipm_server <- function(input, output, session) {
     bf_evidence(s, sprintf("Interviewer %s (%s)", fmt_i(input$bf_iv), s$team_label[1]),
                 tags$button(class = "btn btn-primary", onclick = sprintf("Shiny.setInputValue('go_iv', %s, {priority: 'event'})", fmt_i(input$bf_iv)), "Open the interviewer page")) })
   observeEvent(input$bf_forget, showModal(modalDialog(title = "Forget this survey's history?",
-    "The issues kept from earlier runs of this survey will be deleted; the next run starts a new history. Your current results stay.",
+    "The issues kept from earlier runs of this survey and their follow-up (assigned, done, notes) will be deleted; the next run starts a new history. Your current results stay.",
     footer = tagList(modalButton("Cancel"), actionButton("bf_forget_ok", "Forget the history", class = "btn-danger")))))
   observeEvent(input$bf_forget_ok, { removeModal(); req(rv$res); ipm_history_forget(rv$res); rv$cmp <- ipm_compare(rv$sc, list(), as.Date(NA))
     showNotification("History deleted.", type = "message") })
@@ -1000,7 +1067,8 @@ ipm_server <- function(input, output, session) {
       ev_bars(h$value, h$benchmark, if (h$level == "interviewer") "Interviewer" else "Team", if (h$type %in% c("heaping")) "Expected" else if (h$level == "interviewer") "Team / survey" else "Others / survey"),
       div(class = "e", h$evidence),
       if (!is.na(h$was) && identical(h$status, "persisting") && h$was != h$headline) div(class = "e", style = "color:#7A5300", "Last run: ", h$was),
-      div(class = "a", icon("arrow-right"), sprintf(" %s (%s, %s)", h$action, h$owner, tolower(h$timing))))
+      div(class = "a", icon("arrow-right"), sprintf(" %s (%s, %s)", h$action, h$owner, tolower(h$timing))),
+      act_bar(h))
   }
   go_team <- function(t) { updateSelectInput(session, "tp_team", selected = t); nav_to("team"); removeModal() }
   go_iv <- function(i) { updateSelectizeInput(session, "ip_iv", selected = i); nav_to("interv"); removeModal() }
@@ -1051,7 +1119,7 @@ ipm_server <- function(input, output, session) {
 
   output$tp_body <- renderUI({
     if (is.null(rv$sc)) return(no_run())
-    p <- tp_prof(); req(p); t <- p$team; s <- p$issues; iv <- p$interviewers; sv <- p$survey
+    p <- tp_prof(); req(p); t <- p$team; s <- with_act(p$issues); iv <- p$interviewers; sv <- p$survey
     kpi <- function(l, v, sub = NULL) div(class = "bf-kpi", div(class = "l", l), div(class = "v", v), if (!is.null(sub)) div(class = "s", sub))
     ivt <- tags$table(class = "tp-tbl",
       tags$tr(tags$th("Interviewer"), tags$th("Issues"), tags$th("Flags"), tags$th(sprintf("Length (%s)", p$questionnaire)), tags$th("Completion"), tags$th("Main issue")),
@@ -1075,14 +1143,15 @@ ipm_server <- function(input, output, session) {
             trend_card("tp_plot_", p),
             div(class = "bf-card", tags$h4("Modules where the team stands out"),
                 div(class = "hint", "Share of the team's tests flagged (blue) vs the other teams (grey); questions flagged in most teams left out."),
-                mod_bars(p$modules, "Team", "Others")))))
+                mod_bars(p$modules, "Team", "Others")),
+            ai_box("tp", sprintf("Ask about %s", short_lbl(t$team_label)), c("Why is this team a priority, and what should the supervisor do first?", "Which interviewer needs help most, and on what?")))))
   })
   output$tp_brief <- downloadHandler(filename = function() sprintf("supervisor_brief_T%s_%s.docx", input$tp_team, format(Sys.Date(), "%Y%m%d")),
     content = function(f) { req(rv$sc, input$tp_team); ipm_supervisor_brief(rv$res, rv$sc, f, teams = as.integer(input$tp_team), cmp = rv$cmp) })
 
   output$ip_body <- renderUI({
     if (is.null(rv$sc)) return(no_run())
-    p <- ip_prof(); req(p); h <- p$interviewer; s <- p$issues; fg <- p$figures
+    p <- ip_prof(); req(p); h <- p$interviewer; s <- with_act(p$issues); fg <- p$figures
     kpi <- function(l, v, sub = NULL) div(class = "bf-kpi", div(class = "l", l), div(class = "v", v), if (!is.null(sub)) div(class = "s", sub))
     figt <- if (!is.null(fg) && nrow(fg)) tags$table(class = "tp-tbl",
       tags$tr(tags$th(""), tags$th("Questionnaire"), tags$th("Interviewer"), tags$th("Team"), tags$th("Survey"), tags$th("Interviews")),
@@ -1105,9 +1174,143 @@ ipm_server <- function(input, output, session) {
         div(trend_card("ip_plot_", p),
             div(class = "bf-card", tags$h4("Modules with the most flags"),
                 div(class = "hint", "Share of the interviewer's tests flagged (blue) vs all interviewers (grey); questions flagged in most teams left out."),
-                mod_bars(p$modules, "Interviewer", "All")))))
+                mod_bars(p$modules, "Interviewer", "All")),
+            ai_box("ip", sprintf("Ask about interviewer %s", fmt_i(h$interv)), c("What should the supervisor check when observing this interviewer?", "Is this interviewer getting better or worse?")))))
   })
   observeEvent(input$ip_team, { p <- ip_prof(); req(p); go_team(p$interviewer$team) })
+
+  # ---------- action follow-up ----------
+  track_on <- function() isTRUE(.int$history_on()) && !is.null(rv$res)
+  acts <- reactive({ rv$acts_tick; req(rv$res)
+    if (!track_on()) return(NULL)
+    tryCatch(ipm_actions(rv$res), error = function(e) NULL) })
+  with_act <- function(s) {
+    a <- acts(); if (is.null(a) || is.null(s) || !nrow(s)) return(s)
+    ipm_action_status(s, a, .int$history_dates(rv$res)$last)
+  }
+  act_chip <- function(h) {
+    if (is.null(h$action) || is.na(h$action)) return(NULL)
+    d <- if (!is.null(h$action_updated) && !is.na(h$action_updated)) format(as.Date(h$action_updated), "%d %b") else ""
+    w <- if (!is.null(h$action_who) && !is.na(h$action_who) && nzchar(h$action_who)) paste0(" ", h$action_who) else ""
+    if (isTRUE(h$still_found)) return(span(class = "act act-warn", sprintf("Done on %s but still found", d)))
+    switch(h$action, open = span(class = "act act-open", "Not followed up yet"),
+           assigned = span(class = "act act-asg", sprintf("Assigned to%s, %s", if (nzchar(w)) w else " someone", d)),
+           done = span(class = "act act-done", sprintf("Done, %s%s", d, if (nzchar(w)) paste0(" (", trimws(w), ")") else "")),
+           escalated = span(class = "act act-esc", sprintf("Escalated%s, %s", if (nzchar(w)) paste0(" to", w) else "", d)), NULL)
+  }
+  act_bar <- function(h) {
+    if (is.null(h$action) || is.null(h$key)) return(NULL)
+    div(class = "actbar", act_chip(h),
+        if (!is.na(h$action_note %||% NA) && nzchar(h$action_note)) span(class = "actnote", h$action_note),
+        tags$button(class = "btn btn-sm btn-outline-primary", onclick = sprintf("Shiny.setInputValue('act_open', %s, {priority: 'event'})", encodeString(h$key, quote = "'")), "Follow up"))
+  }
+  cur_issues <- reactive({ req(rv$sc); c <- rv$cmp %||% ipm_compare(rv$sc, list(), as.Date(NA)); s <- copy(c$issues)
+    if (!"key" %in% names(s)) s[, key := .int$issue_key(s)]; s })
+  observeEvent(input$act_open, {
+    k <- input$act_open; s <- with_act(cur_issues()[key == k]); req(nrow(s) == 1); rv$act_key <- k
+    showModal(modalDialog(title = "Follow up", size = "m", easyClose = TRUE,
+      div(class = "bf-head", s$headline), div(class = "small-note", style = "margin-bottom:10px", sprintf("%s · suggested: %s (%s)", s$team_label %||% "Survey", s$do %||% s$action, s$owner)),
+      radioButtons("act_status", NULL, inline = TRUE, choices = stats::setNames(names(.int$action_states), .int$action_states), selected = s$action %||% "open"),
+      textInput("act_who", "Who (name or role)", value = if (is.na(s$action_who %||% NA)) "" else s$action_who, width = "100%", placeholder = "e.g. supervisor T5, field coordinator"),
+      textAreaInput("act_note", "Note", value = if (is.na(s$action_note %||% NA)) "" else s$action_note, width = "100%", rows = 3,
+                    placeholder = "What was done or agreed, e.g. 'observed 2 interviews on 12 Nov, retrained on HC module'"),
+      div(class = "small-note", "Kept with the run history of this survey and shown at the next runs; an issue set to Done that is still found at the next export is shown as such."),
+      footer = tagList(modalButton("Cancel"), actionButton("act_save", "Save", class = "btn-primary"))))
+  })
+  observeEvent(input$act_save, {
+    k <- rv$act_key; req(k, rv$res); s <- cur_issues()[key == k]
+    ok <- tryCatch({ ipm_action_set(rv$res, k, input$act_status, input$act_who, input$act_note, headline = s$headline[1]); TRUE },
+                   error = function(e) { showNotification(conditionMessage(e), type = "error"); FALSE })
+    if (ok) { removeModal(); rv$acts_tick <- (rv$acts_tick %||% 0) + 1; showNotification("Follow-up saved.", type = "message", duration = 3) }
+  })
+
+  # ---------- questionnaire page ----------
+  heat <- reactive({ req(rv$sc, rv$res); ipm_question_heat(rv$res, rv$sc, by = input$qh_by %||% "question", top = as.integer(input$qh_top %||% 40), hide_survey_wide = isTRUE(input$qh_hide)) })
+  heat_col <- function(r) { if (is.na(r)) return("transparent"); if (r == 0) return("var(--heat0)")
+    x <- min(r / 40, 1); grDevices::rgb(grDevices::colorRamp(c("#FDE3C8", "#F28C28", "#B3140F"))(x), maxColorValue = 255) }
+  output$qh_body <- renderUI({
+    if (is.null(rv$sc)) return(no_run())
+    h <- heat(); if (is.null(h)) return(div(class = "bf", div(class = "bf-card", "No flag analysis in this run.")))
+    rw <- h$rows; tm <- h$teams; ce <- h$cells
+    key <- function(r, t) paste(r, t)
+    cmap <- stats::setNames(seq_len(nrow(ce)), key(ce$row, ce$team))
+    tbl <- tags$table(class = "qh",
+      tags$tr(tags$th(class = "lab", if (h$by == "question") "Question" else "Module"), tags$th(class = "tot", "All teams"),
+              lapply(seq_len(nrow(tm)), function(j) tags$th(class = "tm", title = sprintf("%s - %s priority: open the team page", tm$team_label[j], tm$priority[j]),
+                                                         onclick = sprintf("Shiny.setInputValue('go_team', %d, {priority: 'event'})", tm$team[j]),
+                                                         span(class = "dot", style = sprintf("background:%s", prio_col[[tm$priority[j]]])), short_lbl(tm$team_label[j])))),
+      lapply(seq_len(nrow(rw)), function(i) { r <- rw[i]
+        tags$tr(
+          tags$td(class = "lab", title = r$description %||% "",
+                  tags$b(if (h$by == "question") paste(r$dataset, r$question) else paste(r$dataset, r$module)),
+                  if (isTRUE(r$survey_wide)) span(class = "bf-chip old", style = "margin-left:6px", "most teams"),
+                  if (h$by == "question" && !is.na(r$description)) div(class = "d", substr(r$description, 1, 60))),
+          tags$td(class = "tot", sprintf("%.0f%%", r$rate), div(class = "d", sprintf("%d of %d teams", r$teams_flagged, r$teams))),
+          lapply(seq_len(nrow(tm)), function(j) { k <- cmap[key(r$row, tm$team[j])]
+            if (is.na(k)) return(tags$td(class = "c na", title = sprintf("%s: not tested", tm$team_label[j])))
+            x <- ce[k]
+            tags$td(class = "c", style = sprintf("background:%s", heat_col(x$rate)),
+                    title = sprintf("%s - %s: %d of %d tests flagged (%.0f%%)%s", tm$team_label[j], r$row, x$flags, x$tests, x$rate,
+                                    if (nzchar(x$interviewers)) paste0("; interviewers ", x$interviewers) else ""),
+                    onclick = sprintf("Shiny.setInputValue('go_team', %d, {priority: 'event'})", tm$team[j])) }))
+      }))
+    nsw <- sum(rw$survey_wide)
+    div(class = "bf",
+      div(class = "bf-kpis",
+          div(class = "bf-kpi", div(class = "l", "Questionnaire problems"), div(class = "v", nrow(rv$sc$signals[level == "survey"])), div(class = "s", "questions or modules flagged in most teams")),
+          div(class = "bf-kpi", div(class = "l", "Shown here"), div(class = "v", nrow(rw)), div(class = "s", sprintf("%s with the most flags · %d in most teams", if (h$by == "question") "questions" else "modules", nsw))),
+          div(class = "bf-kpi", div(class = "l", "Survey flag rate"), div(class = "v", sprintf("%.1f%%", rv$sc$survey$flag_rate %||% NA)), div(class = "s", "of all flag tests"))),
+      div(class = "bf-card",
+          tags$h4(if (h$by == "question") "Which questions are flagged in which team" else "Which modules are flagged in which team"),
+          div(class = "hint", "Each cell: share of the team's tests of that question flagged (darker = more). A row dark in most teams is a questionnaire problem (wording, translation, CAPI routing): one note to all teams. A row dark in one or two teams is a team problem. Point at a cell for the figures and the interviewers flagged; click it to open the team."),
+          div(class = "qh-legend", "0%", span(class = "sw", style = "background:var(--heat0)"), span(class = "sw", style = sprintf("background:%s", heat_col(5))),
+              span(class = "sw", style = sprintf("background:%s", heat_col(15))), span(class = "sw", style = sprintf("background:%s", heat_col(30))),
+              span(class = "sw", style = sprintf("background:%s", heat_col(40))), "40%+", span(class = "sw na", style = "margin-left:14px"), "not tested"),
+          div(class = "qh-wrap", tbl)),
+      ai_box("qh", "Ask about the questionnaire", c("Which questions should be checked for wording or translation first?", "Is any module a problem in only a few teams?")))
+  })
+
+  # ---------- AI on each page ----------
+  ai_box <- function(prefix, title, sugg) {
+    st <- tryCatch(ai_st(), error = function(e) NULL)
+    div(class = "bf-card aibox", tags$h4(icon("wand-magic-sparkles"), " ", title),
+      if (!isTRUE(st$ready)) div(class = "hint", "No AI model is set up: choose a connection under 7. Results > Action plan (AI). The answers use the same aggregated figures as this page, never the records.")
+      else div(class = "hint", sprintf("Answered by %s from the aggregated figures of this run (no records are sent).", st$model)),
+      div(class = "sugg", lapply(sugg, function(x) tags$button(class = "btn btn-sm btn-outline-secondary",
+                                                               onclick = sprintf("Shiny.setInputValue('%s_sugg', %s, {priority: 'event'})", prefix, encodeString(x, quote = "'")), x))),
+      div(class = "aiq", textAreaInput(paste0(prefix, "_q"), NULL, width = "100%", rows = 2, placeholder = "Your question"),
+          actionButton(paste0(prefix, "_ask"), "Ask", class = "btn-primary")),
+      uiOutput(paste0(prefix, "_chat")))
+  }
+  ai_ctx <- function(prefix) switch(prefix,
+    tp = list(key = paste0("team:", input$tp_team), lead = { t <- rv$sc$teams[team == as.integer(input$tp_team)]; sprintf("About team %s (%s): ", short_lbl(t$team_label), t$team_label) }),
+    ip = list(key = paste0("iv:", input$ip_iv), lead = { p <- ip_prof(); sprintf("About interviewer %s of team %s: ", input$ip_iv, short_lbl(p$interviewer$team_label)) }),
+    qh = list(key = "questionnaire", lead = "About the questionnaire (questions and modules flagged across teams): "))
+  ai_page_ask <- function(prefix, q) {
+    q <- trimws(q %||% ""); if (!nzchar(q)) return()
+    st <- ai_st()
+    if (!isTRUE(st$ready)) { showNotification("No AI model is set up: choose a connection under 7. Results > Action plan (AI).", type = "warning", duration = 8); return() }
+    if (job_running("ai_ask")) { showNotification("The AI is already answering a question.", type = "warning"); return() }
+    cx <- ai_ctx(prefix)
+    start_job("ai_ask", "ask", list(q = paste0(cx$lead, q), res = rv$res, sc = rv$sc, st = st, history = Filter(function(x) identical(x$ctx, cx$key), rv$chat),
+                                    language = input$ai_lang %||% "English", compact = isTRUE(input$ai_compact)),
+      sprintf("%s is answering", st$model), if (st$provider == "ollama") "local models re-read the whole evidence: 1-5 minutes" else NULL,
+      done = function(a) {
+        if (inherits(a, "error")) { showNotification(job_error(a), type = "error", duration = NULL); return() }
+        rv$chat <- c(rv$chat, list(list(q = q, a = a$answer, team = a$team, ctx = cx$key))); updateTextAreaInput(session, paste0(prefix, "_q"), value = "") })
+  }
+  for (px in c("tp", "ip", "qh")) local({ px <- px
+    observeEvent(input[[paste0(px, "_ask")]], ai_page_ask(px, input[[paste0(px, "_q")]]))
+    observeEvent(input[[paste0(px, "_sugg")]], ai_page_ask(px, input[[paste0(px, "_sugg")]]))
+    output[[paste0(px, "_chat")]] <- renderUI({
+      k <- tryCatch(ai_ctx(px)$key, error = function(e) "")
+      ch <- Filter(function(x) identical(x$ctx, k), rv$chat); if (!length(ch)) return(NULL)
+      tagList(lapply(rev(ch), function(x) tagList(div(class = "chatq", x$q), div(class = "chata", md_html(x$a)))))
+    })
+  })
+
+  # ---------- run from the data page ----------
+  observeEvent(input$run_quick, { nav_to("run"); do_run() })
 
   # ---------- results: summary ----------
   output$kpis <- renderUI({
