@@ -1,9 +1,11 @@
-# ipmR (development version)
+# ipmR 0.6.2.9002 (development version)
 
 **New app (phase 4a: briefing and run history)**
 * New home page after a run, "Briefing": what to act on this week - teams to act on (one line each with the first action), interviewers to observe now, questionnaire problems, a team health grid (each team x 8 areas: flags, interview length, completion, household listing, "don't know", birth history, anthropometry, FL) and the evidence of each issue in one click (#55).
 * Run history: each run keeps the list of issues found (codes, figures and headlines - no records) per survey and data export, so the next run shows what is new, what persists ("3rd run in a row, since 27 Nov") and what was resolved, and how the counts changed. `ipm_history_update()`, `ipm_compare()`, `ipm_briefing()`; folder set by `IPM_HISTORY_DIR`, turned off by `IPM_HISTORY=off`; "Forget this survey's history" in the app (#56).
 * The 6 setup steps are grouped under one "Setup" menu; after a run the app opens on the briefing (#57).
+
+# ipmR 0.6.2.9001 (development version)
 
 **One rule engine (phase 3)**
 * The summary, the team scorecard, the rule-based action plan, the AI evidence and the report now all read the same list of issues (ipm_scorecard()), so they can no longer contradict each other (#49).
