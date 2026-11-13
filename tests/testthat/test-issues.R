@@ -35,6 +35,18 @@ test_that("one short interviewer is an interviewer issue, and two questionnaires
   expect_equal(sc$teams[team == 1]$priority, "Medium")
 })
 
+test_that("the summary has one line per interviewer, without the team code in brackets", {
+  res <- mini_res(function(team, interv, ds) ifelse(interv == 12, 15, 40))
+  res$team_info$team_label <- c("T1 (10)", "T2 (20)", "T3 (30)")
+  sc <- ipm_scorecard(res)
+  extra <- data.table::copy(sc$signals[level == "interviewer"])[, `:=`(headline = "Low completion: hh 20% vs 80% for the team", do = "Review result codes of 12")]
+  sc$signals <- rbind(sc$signals, extra)
+  b <- ipm_summary(res, sc)$sections$interviewers$bullets
+  b12 <- grep("^Interviewer 12 ", b, value = TRUE)
+  expect_length(b12, 1)
+  expect_match(b12, "^Interviewer 12 \\(T1\\) - Short interviews: .*\\. Low completion: .*Do: Observe 12 .*; Review result codes of 12")
+})
+
 test_that("questions flagged in most teams are questionnaire problems and do not count against teams", {
   cfg <- mics_autoconfig(make_synth(), "Synthetic"); cfg$period$start <- "2026-01-05"; cfg$period$days <- 28
   res <- run_ipm(cfg, write = FALSE, progress = function(...) NULL, keep_data = FALSE)

@@ -92,13 +92,15 @@ ipm_summary <- function(res, sc = ipm_scorecard(res)) {
   if (!length(bt)) bt <- "No team stands out: no team-wide issue and no team with several interviewer issues."
   secs$teams <- list(title = "Teams to act on (High and Medium priority)", bullets = bt)
 
-  # interviewers: one line per interviewer issue (most severe first)
+  # interviewers: one line per interviewer with all his/her issues (most severe first)
   ivs <- sig[level == "interviewer"]
-  bi <- vapply(seq_len(min(nrow(ivs), 25)), function(i) { h <- ivs[i]
-    sprintf("Interviewer %s (%s) - %s%s. Do: %s (%s, %s).", fmt_int(h$interv), h$team_label, h$headline, if (h$severity == "high") " [high]" else "",
-            h$do, h$owner, tolower(h$timing))
+  ids <- unique(ivs$interv)
+  bi <- vapply(head(ids, 25), function(id) { h <- ivs[interv == id]
+    sprintf("Interviewer %s (%s) - %s. Do: %s.", fmt_int(id), sub(" \\([^()]*\\)$", "", h$team_label[1]),
+            paste0(h$headline, ifelse(h$severity == "high", " [high]", ""), collapse = ". "),
+            paste(unique(sprintf("%s (%s, %s)", h$do, h$owner, tolower(h$timing))), collapse = "; "))
   }, "")
-  if (nrow(ivs) > 25) bi <- c(bi, sprintf("... and %d more in the team scorecard.", nrow(ivs) - 25))
+  if (length(ids) > 25) bi <- c(bi, sprintf("... and %d more interviewer(s) in the team scorecard.", length(ids) - 25))
   if (!length(bi)) bi <- "No interviewer stands out from his/her team-mates."
   else bi <- c(bi, "Caution: interviewers are compared with their team-mates. An interviewer doing good work can be flagged because the others record the same wrong pattern; check the flag table before acting.")
   secs$interviewers <- list(title = "Interviewers to observe", bullets = bi)
