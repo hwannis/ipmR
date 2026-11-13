@@ -231,6 +231,12 @@ ipm_ui <- page_navbar(
     .bf-legend {font-size:0.75em; color:#5f6368; margin-top:6px}
     .bf-legend span {display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
     .bf-line {font-size:0.86em; padding:6px 0; border-top:1px solid #eef0f3}
+    .bf-kpi .s {font-size:0.75em; color:#5f6368; margin-top:2px}
+    .bf-med {display:grid; grid-template-columns:118px minmax(0, 1fr) auto; gap:12px; align-items:center; padding:7px 0; border-top:1px solid #eef0f3; font-size:0.88em}
+    @media (max-width: 600px) {.bf-med {grid-template-columns:minmax(0, 1fr)}}
+    .bf-more summary {cursor:pointer; color:#2B3F87; font-size:0.86em; font-weight:600; padding:9px 0 4px 0; border-top:1px solid #eef0f3}
+    .bf-more .btn {font-size:0.78em; padding:2px 10px; border-radius:6px}
+    .name-box {background:#FFF8E1; border:1px solid #F3D27A; border-radius:8px; padding:10px 12px 2px 12px; margin:10px 0}
     .bf-empty {max-width:640px; margin:60px auto; text-align:center}
     .bf-ev {border-top:1px solid #eef0f3; padding:10px 0}
     .bf-ev .e {font-size:0.85em; color:#444; margin-top:3px}
@@ -253,7 +259,7 @@ ipm_ui <- page_navbar(
               actionButton("scan", "Read this folder", class = "btn-outline-primary btn-sm"))),
         div(class = "howto", tags$b("Your data. "), sprintf("Files are processed only within your own session and are never shared with other users. Name and other free-text variables are removed when the files are read. All uploaded files, results and reports are deleted from the server when you close the browser tab, after %s minutes of inactivity, or immediately with the button below. Do not upload data you are not authorised to process on this server.", format(IDLE_MINUTES))),
         actionButton("wipe", "Delete my data now", class = "btn-outline-danger")),
-      card(card_header("What was found"), uiOutput("found_ui"), tableOutput("found_tbl"))),
+      card(card_header("What was found"), uiOutput("found_ui"), uiOutput("name_box"), tableOutput("found_tbl"))),
     div(style = "text-align:right", actionButton("go2", HTML("Next: survey settings &rarr;"), class = "btn-primary"))),
 
   # ---------------- 2. SETTINGS & OUTPUTS ----------------
@@ -262,7 +268,7 @@ ipm_ui <- page_navbar(
             "Check the survey name. The period of analysis (21 days recommended, normally the most recent 3 weeks) is used for the flag analysis and the anthropometry case listing; all other outputs use the whole fieldwork. Untick outputs you do not need, and check the variables in the boxes on the right (they were filled in automatically)."),
     layout_columns(col_widths = c(6, 6),
       card(card_header("Survey and period"),
-        textInput("survey_name", "Name of the survey", width = "100%"),
+        textInput("survey_name", "Name of the survey", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"),
         fluidRow(column(6, dateInput("period_start", "Period of analysis: first day", value = Sys.Date() - 21)),
                  column(6, numericInput("period_days", "Extent (days)", value = 21, min = 1))),
         div(style = "margin:-6px 0 8px 0", tags$span(class = "small-note", "Set to: "),
@@ -541,7 +547,7 @@ ipm_server <- function(input, output, session) {
       cfg <- tryCatch(mics_autoconfig(ddir), error = function(e) { showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
       req(cfg)
       cfg$results_dir <- file.path(sdir, "results"); cfg$options$drop_long_strings <- TRUE; cfg$options$fig_dpi <- 120
-      cfg$survey_name <- "MICS survey"
+      cfg$survey_name <- ""
       apply_cfg(cfg, keep_paths = TRUE)
     })
     rv$n_files <- n
@@ -579,6 +585,15 @@ ipm_server <- function(input, output, session) {
     showNotification("Settings loaded.", type = "message")
   })
 
+  # survey name asked on the data page too (same value as on the settings page)
+  output$name_box <- renderUI({
+    req(rv$cfg)
+    div(class = "name-box",
+        textInput("survey_name_d", tagList(tags$b("Name of the survey"), " - shown on the briefing and the reports, and used to keep the run history of this survey apart from others"),
+                  value = isolate(input$survey_name) %||% "", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"))
+  })
+  observeEvent(input$survey_name_d, if (!identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name", value = input$survey_name_d))
+  observeEvent(input$survey_name, if (!is.null(input$survey_name_d) && !identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name_d", value = input$survey_name))
   output$found_ui <- renderUI({
     cfg <- cur_cfg()
     if (is.null(cfg)) return(p(class = "small-note", "No data loaded yet."))
@@ -731,7 +746,8 @@ ipm_server <- function(input, output, session) {
     g <- function(id, default = NULL) { v <- input[[id]]; if (is.null(v)) default else v }
     nz <- function(v) if (is.null(v) || !length(v) || identical(v, "")) NULL else v
     split_ws <- function(s) { s <- unlist(strsplit(trimws(s %||% ""), "[[:space:]]+")); s[nzchar(s)] }
-    cfg$survey_name <- g("survey_name", cfg$survey_name)
+    cfg$survey_name <- trimws(g("survey_name", cfg$survey_name) %||% "")
+    if (!nzchar(cfg$survey_name)) cfg$survey_name <- "MICS survey"
     cfg$period <- list(start = if (length(input$period_start) && !is.na(input$period_start)) format(input$period_start) else cfg$period$start, days = g("period_days", 21))
     ds <- list()
     for (nm in names(cfg$datasets)) {
@@ -829,16 +845,24 @@ ipm_server <- function(input, output, session) {
       d <- if (is.na(k$before)) NULL else { x <- k$now - k$before
         cls <- if (x == 0) "bf-same" else if ((x > 0) == (k$what != "resolved")) "bf-up" else "bf-down"
         span(class = paste("d", cls), if (x == 0) "same" else sprintf("%+d", x)) }
-      div(class = "bf-kpi", div(class = "l", k$label), div(class = "v", k$now, d)) })
+      div(class = "bf-kpi", div(class = "l", k$label), div(class = "v", k$now, d),
+          if (k$what == "teams" && k$now > 0) div(class = "s", sprintf("%d high · %d medium", sum(b$teams$priority == "High"), sum(b$teams$priority == "Medium")))) })
     if (is.null(b$previous)) kpis[[4]] <- div(class = "bf-kpi", div(class = "l", "Teams in the survey"), div(class = "v", nrow(rv$sc$teams)))
 
-    team_rows <- lapply(seq_len(nrow(b$teams)), function(i) { h <- b$teams[i]
+    hi <- b$teams[priority == "High"]; md <- b$teams[priority != "High"]
+    team_rows <- lapply(seq_len(nrow(hi)), function(i) { h <- hi[i]
       div(class = "bf-item",
         div(span(class = paste("bf-pill", tolower(h$priority)), sprintf("%s · %s", sub(" \\([^()]*\\)$", "", h$team_label), h$priority))),
         div(div(class = "bf-head", h$headline),
             div(class = "bf-sub", paste(c(if (h$more > 0) sprintf("+%d more team issue%s", h$more, if (h$more > 1) "s" else ""),
                                           if (nzchar(h$interviewers)) paste("interviewers", h$interviewers)), collapse = " · ")),
             div(class = "bf-do", icon("arrow-right"), sprintf(" %s (%s, %s)", h$do, h$owner, tolower(h$timing)))),
+        div(class = "bf-acts", bf_chip(h$status, h$prev_priority, h$priority), bf_btn("bf_team", h$team)))
+    })
+    med_rows <- lapply(seq_len(nrow(md)), function(i) { h <- md[i]
+      div(class = "bf-med",
+        div(span(class = paste("bf-pill", tolower(h$priority)), sprintf("%s · %s", sub(" \\([^()]*\\)$", "", h$team_label), h$priority))),
+        div(h$headline, if (h$more > 0) span(style = "color:#5f6368", sprintf(" (+%d more)", h$more))),
         div(class = "bf-acts", bf_chip(h$status, h$prev_priority, h$priority), bf_btn("bf_team", h$team)))
     })
     iv_rows <- lapply(seq_len(nrow(b$interviewers)), function(i) { h <- b$interviewers[i]
@@ -883,8 +907,12 @@ ipm_server <- function(input, output, session) {
       div(class = "bf-cols",
         div(
           div(class = "bf-card", tags$h4("Teams to act on this week"),
-              div(class = "hint", "High and Medium priority teams, most urgent first. The arrow is the first thing to do; 'Evidence' shows every issue with its figures and action."),
-              if (length(team_rows)) team_rows else div(class = "bf-line", "No team stands out this week.")),
+              div(class = "hint", "High priority teams first, most urgent first. The arrow is the first thing to do; 'Evidence' shows every issue with its figures and action."),
+              if (length(team_rows)) team_rows else if (!length(med_rows)) div(class = "bf-line", "No team stands out this week.")
+              else div(class = "bf-line", "No High priority team this week."),
+              if (length(med_rows)) tags$details(class = "bf-more", open = if (!length(team_rows)) NA,
+                tags$summary(sprintf("%d Medium priority team%s - follow up at the next supervisor call", length(med_rows), if (length(med_rows) > 1) "s" else "")),
+                med_rows)),
           div(class = "bf-card", tags$h4("Interviewers to observe now"),
               div(class = "hint", "Interviewers with at least one high-severity issue, compared with their team-mates or the survey."),
               if (length(iv_rows)) iv_rows else div(class = "bf-line", "No interviewer with a high-severity issue."))),

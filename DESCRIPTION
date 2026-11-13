@@ -1,7 +1,7 @@
 Package: ipmR
 Type: Package
 Title: Interviewer Performance Monitoring for MICS (R port of IPM v7)
-Version: 0.6.2.9002
+Version: 0.6.2.9003
 Authors@R: c(person("Hrair", "Wannis", role = c("aut", "cre"), email = "cobmahavishnu@gmail.com"),
     person("Pierre", "Martel", role = "ctb", comment = "Author of the original Stata IPM application v7.0.0"))
 Description: R implementation of the Interviewer Performance Monitoring (IPM)

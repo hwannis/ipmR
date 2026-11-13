@@ -280,7 +280,14 @@ out_ant_heap <- function(p) {
 period_bounds <- function(cfg) {
   # the period covers `days` days including the start day (Stata: start + days, one day more)
   st <- as.IDate(cfg$period$start); en <- st + as.integer(cfg$period$days %||% 21) - if (isTRUE(cfg$options$stata_compat)) 0L else 1L
-  list(start = st, end = en, label = sprintf("%s-%s", format(st, "%d%b%Y"), format(en, "%d%b%Y")))
+  list(start = st, end = en, label = period_label(st, en))
+}
+
+# "14 Nov - 04 Dec 2018" (the year once when both days are in the same year)
+period_label <- function(st, en) {
+  if (is.na(st) || is.na(en)) return(NA_character_)
+  if (format(st, "%Y") == format(en, "%Y")) sprintf("%s - %s", format(st, "%d %b"), format(en, "%d %b %Y"))
+  else sprintf("%s - %s", format(st, "%d %b %Y"), format(en, "%d %b %Y"))
 }
 
 #' Output 8: out-of-range / flagged anthropometry per team and week (+ case listing)

@@ -1,3 +1,9 @@
+# ipmR 0.6.2.9003 (development version)
+
+* Briefing: High priority teams are shown in full; Medium priority teams are one line each, under "N Medium priority teams" (click to open). The "Teams to act on" number says how many are high and medium (#58).
+* The survey name is asked on the data page as well as on the settings page, and is empty until typed (it names the briefing, the reports and the run history); without a name the survey is called "MICS survey" (#59).
+* The period of analysis is written "14 Nov - 04 Dec 2018" everywhere (was "14Nov2018-04Dec2018") (#60).
+
 # ipmR 0.6.2.9002 (development version)
 
 **New app (phase 4a: briefing and run history)**
