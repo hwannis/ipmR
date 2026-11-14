@@ -89,3 +89,33 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 52 | The within-team flag test cannot see a whole team doing the same thing wrong; added team vs rest-of-survey comparison (interview length, completion, 'don't know', household listing, FL). | HW | done (dev) |
 | 53 | Many small signs added up to High priority (T2 Somalia: 13 signs, 1 high); one issue per interviewer and area, none when the whole team has the same issue. | CL (review) | done (dev) |
 | 54 | Low priority shown in green (reads as 'fine'); now grey. Priority rule rewritten and explained in app, report and AI evidence. | CL (review) | done (dev) |
+
+## Speed, rule engine and new app (phases 2-4)
+
+| # | Issue | Source | Status |
+|---|---|---|---|
+| 44 | One box to load the data: drop the export folder, the .sav / .dta files or a .zip on it, or click it to choose; only data files are sent (other files in the folder are ignored) | HW | done (0.6.2) |
+| 45 | Flag tests: one grouped pass per block of questions instead of one test at a time, with an exact closed-form chi-square: 60 s to 5 s | HW | done (0.6.2) |
+| 46 | Graphs no longer keep a hidden copy of the data they were built from (ggplot environments): stored outputs from 1.1 GB to 0.26 GB, which also makes the app's background runs and downloads lighter | HW | done (0.6.2) |
+| 47 | Flag tables documents and the report's large tables are written as Word XML and put into the saved file in one step, instead of one element at a time: the 27 flag tables files from about 4 minutes to 8 s | HW | done (0.6.2) |
+| 48 | Graphs of the report are drawn on several processes (forked on Linux, background R sessions on Windows; option workers, "auto" = cores - 1, at most 6 and one per 0.6 GB of free memory) | HW | done (0.6.2) |
+| 49 | The summary, the team scorecard, the rule-based action plan, the AI evidence and the report now all read the same list of issues (ipm_scorecard()), so they can no longer contradict each other | HW | done (0.7.0) |
+| 50 | Every issue is a questionnaire problem (a question or module flagged in most teams), a whole-team issue or an interviewer issue, with a one-line headline, the numbers, a short action, owner and timing | HW | done (0.7.0) |
+| 51 | Questions flagged in most teams are questionnaire problems: listed once, and left out when teams and interviewers are compared (Somalia: 88 questions; flag rate without them 4.0% instead of 7.1%) | HW | done (0.7.0) |
+| 52 | New team vs rest-of-survey comparison, for problems the within-team flag test cannot see (the whole team doing the same thing): interview length, completion, share of "don't know" answers, household members listed, FL assessment | HW | done (0.7.0) |
+| 53 | One issue per interviewer and area (e.g | HW | done (0.7.0) |
+| 54 | Team priority: High = team-wide excess of flags or 2+ high-severity issues; Medium = 1 high-severity issue or 3+ issues; Low otherwise | HW | done (0.7.0) |
+| 55 | New home page after a run, "Briefing": what to act on this week - teams to act on (one line each with the first action), interviewers to observe now, questionnaire problems, a team health grid (each team x 8 areas: flags,... | HW | done (0.7.0) |
+| 56 | Run history: each run keeps the list of issues found (codes, figures and headlines - no records) per survey and data export, so the next run shows what is new, what persists ("3rd run in a row, since 27 Nov") and what was... | HW | done (0.7.0) |
+| 57 | The 6 setup steps are grouped under one "Setup" menu; after a run the app opens on the briefing | HW | done (0.7.0) |
+| 58 | Briefing: High priority teams are shown in full; Medium priority teams are one line each, under "N Medium priority teams" (click to open) | HW | done (0.7.0) |
+| 59 | The survey name is asked on the data page as well as on the settings page, and is empty until typed (it names the briefing, the reports and the run history); without a name the survey is called "MICS survey" | HW | done (0.7.0) |
+| 60 | The period of analysis is written "14 Nov - 04 Dec 2018" everywhere (was "14Nov2018-04Dec2018") | HW | done (0.7.0) |
+| 61 | New "Teams" page: one team at a time - priority, every issue with its figures, a bar comparing the team with its benchmark and the action; its interviewers (flags, interview length, completion, main issue); week-by-week charts... | HW | done (0.7.0) |
+| 62 | New "Interviewers" page: the interviewer's issues, interview length and completion per questionnaire vs the team and the survey, a week-by-week chart and the modules with the most flags (questionnaire problems left out) | HW | done (0.7.0) |
+| 63 | Supervisor brief: one page per team for the supervisor - what to do this week, the team issues, the interviewers to observe and a trend chart | HW | done (0.7.0) |
+| 64 | Briefing: click a team or interviewer to open its page; the evidence window shows the same bars and has an "Open the team page" button | HW | done (0.7.0) |
+| 65 | Follow-up of each issue: "Follow up" sets it to assigned (to whom), done or escalated, with a note | HW | done (0.7.0) |
+| 66 | New "Questionnaire" page: questions (or modules) x teams, coloured by the share of tests flagged - a row dark in most teams is a questionnaire problem, a row dark in one or two teams is a team problem; point at a cell for the... | HW | done (0.7.0) |
+| 67 | Ask the AI from the team, interviewer and questionnaire pages: the question is asked about that team, interviewer or the questionnaire, with suggested questions; answers stay on the page | HW | done (0.7.0) |
+| 68 | Dark mode (switch in the top bar); phone layout (short title, cards two by two, tables scroll); one colour for medium priority everywhere; "Run now with these settings" on the data page, so a routine run is: drop the data,... | HW | done (0.7.0) |
