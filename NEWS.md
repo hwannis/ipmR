@@ -1,12 +1,16 @@
-# ipmR 0.6.2.9005 (development version)
+# ipmR 0.7.0
 
-**New app (phase 4c: follow-up, questionnaire page, AI on each page, polish)**
-* Follow-up of each issue: "Follow up" sets it to assigned (to whom), done or escalated, with a note. It is kept with the run history of the survey and shown on the issue at the next runs; an issue set to done that is still found at the next export is shown as "Done on 12 Nov but still found", and listed on the briefing. The briefing shows the follow-up of each team. `ipm_actions()`, `ipm_action_set()`, `ipm_action_status()` (#65).
-* New "Questionnaire" page: questions (or modules) x teams, coloured by the share of tests flagged - a row dark in most teams is a questionnaire problem, a row dark in one or two teams is a team problem; point at a cell for the figures and the interviewers flagged, click to open the team. Option to hide the questions flagged in most teams. `ipm_question_heat()` (#66).
-* Ask the AI from the team, interviewer and questionnaire pages: the question is asked about that team, interviewer or the questionnaire, with suggested questions; answers stay on the page. Uses the AI connection set under Results > Action plan (AI) (#67).
-* Dark mode (switch in the top bar); phone layout (short title, cards two by two, tables scroll); one colour for medium priority everywhere; "Run now with these settings" on the data page, so a routine run is: drop the data, check the name, run (#68).
+A new app built around what to act on. After a run it opens on a **Briefing** (teams to act on this week, interviewers to observe, questionnaire problems, team health grid), compares the run with the earlier runs of the same survey (new, persisting, resolved), has a page per team and per interviewer, a questionnaire heat map, a one-page supervisor brief per team and the follow-up of each issue. All of it reads the same list of issues (one rule engine). On a server, keep the run history in a persistent folder: set `IPM_HISTORY_DIR` to a folder mapped to a volume (otherwise it is lost when the container is rebuilt).
 
-# ipmR 0.6.2.9004 (development version)
+**New app (phase 4a: briefing and run history)**
+* New home page after a run, "Briefing": what to act on this week - teams to act on (one line each with the first action), interviewers to observe now, questionnaire problems, a team health grid (each team x 8 areas: flags, interview length, completion, household listing, "don't know", birth history, anthropometry, FL) and the evidence of each issue in one click (#55).
+* Run history: each run keeps the list of issues found (codes, figures and headlines - no records) per survey and data export, so the next run shows what is new, what persists ("3rd run in a row, since 27 Nov") and what was resolved, and how the counts changed. `ipm_history_update()`, `ipm_compare()`, `ipm_briefing()`; folder set by `IPM_HISTORY_DIR`, turned off by `IPM_HISTORY=off`; "Forget this survey's history" in the app (#56).
+* The 6 setup steps are grouped under one "Setup" menu; after a run the app opens on the briefing (#57).
+
+**Briefing, survey name and dates**
+* Briefing: High priority teams are shown in full; Medium priority teams are one line each, under "N Medium priority teams" (click to open). The "Teams to act on" number says how many are high and medium (#58).
+* The survey name is asked on the data page as well as on the settings page, and is empty until typed (it names the briefing, the reports and the run history); without a name the survey is called "MICS survey" (#59).
+* The period of analysis is written "14 Nov - 04 Dec 2018" everywhere (was "14Nov2018-04Dec2018") (#60).
 
 **New app (phase 4b: team and interviewer pages, supervisor brief)**
 * New "Teams" page: one team at a time - priority, every issue with its figures, a bar comparing the team with its benchmark and the action; its interviewers (flags, interview length, completion, main issue); week-by-week charts of interview length, completion and children under 5 listed (team vs the other teams); and the modules where the team stands out (#61).
@@ -14,20 +18,11 @@
 * Supervisor brief: one page per team for the supervisor - what to do this week, the team issues, the interviewers to observe and a trend chart. "Supervisor brief (Word)" on the team page; "Supervisor briefs (Word)" on the briefing gives all High and Medium teams. The full team action plan stays under Results (#63).
 * Briefing: click a team or interviewer to open its page; the evidence window shows the same bars and has an "Open the team page" button. `ipm_team_profile()`, `ipm_interviewer_profile()`, `ipm_trend_plot()`, `ipm_supervisor_brief()` (#64).
 
-# ipmR 0.6.2.9003 (development version)
-
-* Briefing: High priority teams are shown in full; Medium priority teams are one line each, under "N Medium priority teams" (click to open). The "Teams to act on" number says how many are high and medium (#58).
-* The survey name is asked on the data page as well as on the settings page, and is empty until typed (it names the briefing, the reports and the run history); without a name the survey is called "MICS survey" (#59).
-* The period of analysis is written "14 Nov - 04 Dec 2018" everywhere (was "14Nov2018-04Dec2018") (#60).
-
-# ipmR 0.6.2.9002 (development version)
-
-**New app (phase 4a: briefing and run history)**
-* New home page after a run, "Briefing": what to act on this week - teams to act on (one line each with the first action), interviewers to observe now, questionnaire problems, a team health grid (each team x 8 areas: flags, interview length, completion, household listing, "don't know", birth history, anthropometry, FL) and the evidence of each issue in one click (#55).
-* Run history: each run keeps the list of issues found (codes, figures and headlines - no records) per survey and data export, so the next run shows what is new, what persists ("3rd run in a row, since 27 Nov") and what was resolved, and how the counts changed. `ipm_history_update()`, `ipm_compare()`, `ipm_briefing()`; folder set by `IPM_HISTORY_DIR`, turned off by `IPM_HISTORY=off`; "Forget this survey's history" in the app (#56).
-* The 6 setup steps are grouped under one "Setup" menu; after a run the app opens on the briefing (#57).
-
-# ipmR 0.6.2.9001 (development version)
+**New app (phase 4c: follow-up, questionnaire page, AI on each page, polish)**
+* Follow-up of each issue: "Follow up" sets it to assigned (to whom), done or escalated, with a note. It is kept with the run history of the survey and shown on the issue at the next runs; an issue set to done that is still found at the next export is shown as "Done on 12 Nov but still found", and listed on the briefing. The briefing shows the follow-up of each team. `ipm_actions()`, `ipm_action_set()`, `ipm_action_status()` (#65).
+* New "Questionnaire" page: questions (or modules) x teams, coloured by the share of tests flagged - a row dark in most teams is a questionnaire problem, a row dark in one or two teams is a team problem; point at a cell for the figures and the interviewers flagged, click to open the team. Option to hide the questions flagged in most teams. `ipm_question_heat()` (#66).
+* Ask the AI from the team, interviewer and questionnaire pages: the question is asked about that team, interviewer or the questionnaire, with suggested questions; answers stay on the page. Uses the AI connection set under Results > Action plan (AI) (#67).
+* Dark mode (switch in the top bar); phone layout (short title, cards two by two, tables scroll); one colour for medium priority everywhere; "Run now with these settings" on the data page, so a routine run is: drop the data, check the name, run (#68).
 
 **One rule engine (phase 3)**
 * The summary, the team scorecard, the rule-based action plan, the AI evidence and the report now all read the same list of issues (ipm_scorecard()), so they can no longer contradict each other (#49).
