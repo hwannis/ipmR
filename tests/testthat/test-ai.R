@@ -182,3 +182,20 @@ test_that("an AI reading sends only the figures behind the graph or table", {
   expect_match(a$answer, "Mock reading of Data"); expect_gt(a$sent, 0)
   expect_error(ipm_ai_read("x", data.frame(a = 1), st = ipm_ai_settings("none")), "No AI provider")
 })
+
+test_that("the plan request can be limited to High priority teams, with its size and cost estimated first", {
+  res <- synth_res(); sc <- ipm_scorecard(res)
+  sc$teams <- data.table::copy(sc$teams)[, priority := ifelse(seq_len(.N) == 1L, "High", "Low")]
+  hi <- sc$teams[priority == "High", team_label]
+  expect_length(hi, 1); expect_gt(nrow(sc$teams), 1)
+  ev <- ipm_ai_evidence(res, sc, priorities = "High")
+  expect_setequal(vapply(ev$teams, `[[`, "", "team"), hi)
+  expect_match(ev$note, "only the High priority teams")
+  expect_match(ai_plan_prompt(res, sc, priorities = "High")$user, "rule-based priority High", fixed = TRUE)
+  st <- ipm_ai_settings("anthropic", "claude-sonnet-5-5", "k")
+  e1 <- ipm_ai_estimate(res, sc, st, priorities = "High"); e2 <- ipm_ai_estimate(res, sc, st)
+  expect_equal(e1$teams, length(hi)); expect_lt(e1$input_tokens, e2$input_tokens)
+  expect_true(e1$usd[1] > 0 && e1$usd[2] >= e1$usd[1]); expect_false(e1$local)
+  expect_true(all(is.na(ipm_ai_estimate(res, sc, ipm_ai_settings("anthropic", "some-new-model", "k"))$usd)))
+  expect_true(ipm_ai_estimate(res, sc, ipm_ai_settings("mock"))$local)
+})

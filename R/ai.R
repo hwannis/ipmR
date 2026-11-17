@@ -36,7 +36,7 @@ ipm_ai_settings <- function(provider = NULL, model = NULL, api_key = NULL, base_
   mdl <- model %||% switch(prov, anthropic = "claude-sonnet-5-5", mock = "mock", "")
   structure(list(provider = prov, model = mdl, api_key = key, base_url = base, label = label %||% ai_providers[[prov]],
                  allow_user_key = ipm_ai_allow_custom(),
-                 timeout = as.numeric(ai_env("IPM_AI_TIMEOUT", if (prov == "ollama") "900" else "300")),
+                 timeout = as.numeric(ai_env("IPM_AI_TIMEOUT", if (prov %in% c("ollama", "anthropic")) "900" else "300")),
                  ready = prov == "mock" || (prov == "anthropic" && nzchar(key) && nzchar(mdl)) || (prov %in% c("ollama", "openai") && nzchar(base) && nzchar(mdl))),
             class = "ipm_ai_settings")
 }
@@ -132,12 +132,14 @@ ipm_ai_test <- function(st) {
 #' @param team optional team label: adds that team's flag tables (answer counts per interviewer) for questions about it
 #' @param compact smaller evidence for local models (about a third of the size): High/Medium priority teams only,
 #'   3 readings per team, fewer interviewers, modules and survey-wide signals
+#' @param priorities rule-based priorities of the teams to detail (e.g. "High", or c("High", "Medium")); NULL = all teams
 #' @export
-ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team = NULL, compact = FALSE) {
+ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team = NULL, compact = FALSE, priorities = NULL) {
   r1 <- function(x) round(x, 1)
   s <- sc$survey
   ask_team <- team %||% ""
-  tms <- head(if (compact) sc$teams[priority %in% c("High", "Medium") | team_label %in% ask_team] else sc$teams, max_teams)
+  keep <- priorities %||% if (compact) c("High", "Medium")
+  tms <- head(if (length(keep)) sc$teams[priority %in% keep | team_label %in% ask_team] else sc$teams, max_teams)
   sig <- sc$signals
   fa <- res$outputs$flaganal
   readings <- if (!is.null(fa$tests) && nrow(fa$tests)) {
@@ -159,7 +161,7 @@ ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team =
                                                       interviewer = fmt_int(rr$interv[j]), reading = rr$pattern[j]))
          })
   })
-  ivs <- if (!is.null(sc$interviewers)) { iv <- if (compact) sc$interviewers[signals > 0 & team %in% tms$team] else sc$interviewers[signals > 0 | ratio >= 2]
+  ivs <- if (!is.null(sc$interviewers)) { iv <- if (compact || length(priorities)) sc$interviewers[signals > 0 & team %in% tms$team] else sc$interviewers[signals > 0 | ratio >= 2]
     head(iv, if (compact) 25 else 60) } else NULL
   ev <- list(
     survey = list(name = s$name, period_of_analysis = s$period, records = s$records, datasets = s$datasets, teams = s$teams,
@@ -182,7 +184,8 @@ ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team =
     survey_wide_signals = { w <- sig[level == "survey"]; lapply(seq_len(min(nrow(w), if (compact) 12 else 30)), function(i) list(type = w$type[i], severity = w$severity[i], evidence = w$evidence[i])) },
     standard_actions = lapply(ipm_action_library(), function(a) a[c("action", "owner", "timing")])
   )
-  if (compact) ev$note <- "Compact evidence: only the High and Medium priority teams are detailed; other teams are Low priority."
+  if (length(keep)) ev$note <- sprintf("%sonly the %s priority teams are detailed; the other teams are not included in this request.",
+                                       if (compact) "Compact evidence: " else "", paste(keep, collapse = " and "))
   if (!is.null(team) && !is.null(fa$tables)) {
     tn <- sc$teams$team[match(team, sc$teams$team_label)]
     tb <- Filter(function(z) identical(as.integer(z$team), as.integer(tn)), fa$tables)
@@ -239,11 +242,13 @@ ai_system_prompt <- function(language = "English") paste(
 
 # ---------------------------------------------------------------- prompts (one place, used for the calls and the preview)
 
-ai_plan_prompt <- function(res, sc, language = "English", max_teams = 30, compact = FALSE) {
-  evj <- ai_json(ipm_ai_evidence(res, sc, max_teams = max_teams, compact = compact))
-  user <- paste0("Evidence (JSON):\n", evj, "\n\nWrite the action plan. Include every team whose rule-based priority is High or Medium, and any other team you consider needs action; ",
-                 "list survey-wide question/module problems separately. Use at most 6 issues and 5 actions per team.")
-  list(system = ai_system_prompt(language), user = user, schema = ipm_plan_schema(), max_tokens = 16000, evidence_json = evj)
+ai_plan_prompt <- function(res, sc, language = "English", max_teams = 30, compact = FALSE, priorities = NULL) {
+  evj <- ai_json(ipm_ai_evidence(res, sc, max_teams = max_teams, compact = compact, priorities = priorities))
+  who <- if (length(priorities)) sprintf("Include every team in the evidence (rule-based priority %s); ", paste(priorities, collapse = " or "))
+         else "Include every team whose rule-based priority is High or Medium, and any other team you consider needs action; "
+  user <- paste0("Evidence (JSON):\n", evj, "\n\nWrite the action plan. ", who,
+                 "list survey-wide question/module problems separately. Use at most 6 issues and 5 actions per team; write each issue and each action in one short sentence.")
+  list(system = ai_system_prompt(language), user = user, schema = ipm_plan_schema(), max_tokens = 32000, evidence_json = evj)
 }
 
 # Team labels are "T4" or "T4 (104)" (104 = supervisor / team leader code): parts used to recognise a team
@@ -315,7 +320,8 @@ ai_extract_json <- function(txt) {
 # The exact HTTP request for a provider (shared by ipm_ai_call() and ipm_ai_preview(), so the preview is what is sent)
 ai_request <- function(st, system, user, schema = NULL, max_tokens = 8000) {
   if (st$provider == "anthropic") {
-    body <- list(model = st$model, max_tokens = max_tokens, system = system, messages = list(list(role = "user", content = user)))
+    # current Claude models think before answering and the thinking counts against max_tokens: leave room for both
+    body <- list(model = st$model, max_tokens = max(max_tokens, 16000), system = system, messages = list(list(role = "user", content = user)))
     if (!is.null(schema)) body$output_config <- list(format = list(type = "json_schema", schema = schema))
     return(list(url = paste0(st$base_url, "/v1/messages"), headers = c(`x-api-key` = "<API key, not shown>", `anthropic-version` = "2023-06-01"), body = body))
   }
@@ -364,7 +370,7 @@ ipm_ai_call <- function(st, system, user, schema = NULL, max_tokens = 8000) {
       httr2::req_headers(`x-api-key` = st$api_key, `anthropic-version` = "2023-06-01") |>
       httr2::req_body_raw(ai_json(body), type = "application/json")
     out <- send(req)
-    if (identical(out$stop_reason, "max_tokens")) stop("The AI response was cut off (output limit reached). Reduce the number of teams or raise the limit.", call. = FALSE)
+    if (identical(out$stop_reason, "max_tokens")) stop("The AI response was cut off (output limit reached). Try again, or use the compact evidence for the action plan.", call. = FALSE)
     if (identical(out$stop_reason, "refusal")) stop("The model declined to answer this request.", call. = FALSE)
     txt <- paste(vapply(Filter(function(b) identical(b$type, "text"), out$content), `[[`, "", "text"), collapse = "")
     return(list(text = txt, usage = list(input = out$usage$input_tokens, output = out$usage$output_tokens), model = out$model %||% st$model))
@@ -459,10 +465,11 @@ ipm_validate_plan <- function(plan, sc, evidence_json) {
 #' @param language language of the plan (e.g. "English", "French")
 #' @param max_teams maximum number of teams detailed
 #' @param compact compact evidence for local models (see ipm_ai_evidence())
+#' @param priorities rule-based priorities of the teams to include (e.g. "High"); NULL = all teams, the model picks those needing action
 #' @export
-ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), language = "English", max_teams = 30, compact = FALSE) {
+ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), language = "English", max_teams = 30, compact = FALSE, priorities = NULL) {
   if (!isTRUE(st$ready)) { p <- ipm_plan_rules(sc); p$note <- "No AI provider configured: rule-based plan."; return(p) }
-  pr <- ai_plan_prompt(res, sc, language, max_teams, compact = compact); evj <- pr$evidence_json
+  pr <- ai_plan_prompt(res, sc, language, max_teams, compact = compact, priorities = priorities); evj <- pr$evidence_json
   if (st$provider == "mock") attr(st, "mock_text") <- ai_json(ipm_plan_rules(sc, max_teams))
   t0 <- Sys.time()
   out <- ipm_ai_call(st, pr$system, pr$user, schema = pr$schema, max_tokens = pr$max_tokens)
@@ -471,8 +478,35 @@ ipm_ai_plan <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), la
   plan <- ipm_validate_plan(plan, sc, evj)
   plan$source <- if (st$provider == "mock") "mock" else "ai"
   plan$model <- out$model; plan$usage <- out$usage; plan$seconds <- round(as.numeric(difftime(Sys.time(), t0, units = "secs")))
-  plan$generated <- format(Sys.time(), "%Y-%m-%d %H:%M"); plan$language <- language; plan$compact <- compact
+  plan$generated <- format(Sys.time(), "%Y-%m-%d %H:%M"); plan$language <- language; plan$compact <- compact; plan$priorities <- priorities
   plan
+}
+
+no_stop <- function(x) sub("[.][[:space:]]*$", "", x %||% "")      # "Issue sentence." + ": evidence" -> no ".:"
+
+# list prices in USD per million tokens (input, output) for Claude models; a guide only - check the provider's pricing page
+ai_prices <- list(`claude-opus-5-5` = c(4, 20), `claude-opus` = c(5, 25), `claude-sonnet-4` = c(3, 15), `claude-sonnet` = c(2, 10),
+                  `claude-haiku-5` = c(0.1, 0.5), `claude-haiku` = c(1, 5), `claude-fable-5-2` = c(8, 40), `claude-fable` = c(10, 50))
+
+#' Size, cost and time of an AI action plan, before it is sent
+#'
+#' @inheritParams ipm_ai_plan
+#' @return list: teams (number detailed), input_tokens, output_tokens (likely), output_max (with the model's thinking),
+#'   usd (likely and high, NA when the price is not known or the model is local), minutes (likely range)
+#' @export
+ipm_ai_estimate <- function(res, sc = ipm_scorecard(res), st = ipm_ai_settings(), language = "English", max_teams = 30, compact = FALSE, priorities = NULL) {
+  pr <- ai_plan_prompt(res, sc, language, max_teams, compact = compact, priorities = priorities)
+  keep <- priorities %||% if (compact) c("High", "Medium")
+  n <- min(max_teams, if (length(keep)) sum(sc$teams$priority %in% keep) else sum(sc$teams$priority %in% c("High", "Medium")))
+  inp <- ceiling((nchar(pr$system) + nchar(pr$user)) / 3.2)
+  out <- 1000 + 700 * n                                   # about 700 tokens per team in the plan, plus survey-wide problems
+  hi <- min(pr$max_tokens, round(out * 1.8))              # models that think first write more
+  pz <- if (identical(st$provider, "anthropic")) { m <- names(ai_prices)[vapply(names(ai_prices), function(k) startsWith(st$model %||% "", k), logical(1))]
+    if (length(m)) ai_prices[[m[1]]] }
+  usd <- if (is.null(pz)) c(NA_real_, NA_real_) else round(c(inp * pz[1] + out * pz[2], inp * pz[1] + hi * pz[2]) / 1e6, 2)
+  speed <- if (identical(st$provider, "ollama")) c(5, 20) else c(40, 120)    # output tokens per second
+  list(teams = n, input_tokens = inp, output_tokens = out, output_max = hi, usd = usd,
+       minutes = round(c(out / speed[2], hi / speed[1]) / 60, 1), local = st$provider %in% c("ollama", "mock"))
 }
 
 #' Ask a question about the IPM results
@@ -507,7 +541,7 @@ ipm_plan_docx <- function(plan, file, sc = NULL, survey = "", period = "") {
                                if (!identical(plan$source, "rules")) " from the aggregated IPM scorecard (no record-level data were sent)" else ""), italic = TRUE)
   doc <- add_heading(doc, "Overall assessment"); doc <- add_text(doc, plan$overall_assessment %||% "")
   if (length(plan$survey_wide_issues)) { doc <- add_heading(doc, "Survey-wide issues (questions, translation, training)")
-    for (x in plan$survey_wide_issues) doc <- add_bullet(doc, sprintf("%s - %s Action (%s): %s", x$issue, x$evidence, x$owner, x$action)) }
+    for (x in plan$survey_wide_issues) doc <- add_bullet(doc, sprintf("%s: %s Action (%s): %s", no_stop(x$issue), x$evidence, x$owner, x$action)) }
   if (length(plan$most_problematic_modules)) { doc <- add_heading(doc, "Most problematic modules")
     for (x in plan$most_problematic_modules) doc <- add_bullet(doc, sprintf("%s %s: %s Action: %s", x$dataset, x$module, x$why, x$action)) }
   if (!is.null(sc)) {
@@ -520,7 +554,7 @@ ipm_plan_docx <- function(plan, file, sc = NULL, survey = "", period = "") {
   for (t in plan$teams) {
     doc <- add_heading(doc, sprintf("Team %s - %s priority", t$team, t$priority), size = 12)
     doc <- add_text(doc, t$headline %||% "")
-    if (length(t$issues)) { doc <- add_text(doc, "Issues", size = 9.5); for (x in t$issues) doc <- add_bullet(doc, sprintf("%s: %s", x$issue, x$evidence)) }
+    if (length(t$issues)) { doc <- add_text(doc, "Issues", size = 9.5); for (x in t$issues) doc <- add_bullet(doc, sprintf("%s: %s", no_stop(x$issue), x$evidence)) }
     if (length(t$actions)) {
       a <- data.frame(Action = vapply(t$actions, `[[`, "", "action"), Owner = vapply(t$actions, `[[`, "", "owner"), When = vapply(t$actions, `[[`, "", "timing"))
       doc <- flextable::body_add_flextable(doc, flextable::width(ipm_flextable(a), j = 1:3, width = c(7.2, 1.6, 1.2)))

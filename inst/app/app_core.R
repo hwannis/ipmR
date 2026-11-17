@@ -138,7 +138,7 @@ bg_child <- function(what, args, pf, src, libs) {
       old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
       utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq")
       list(report = rep, zip = args$zip) },
-    plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact),
+    plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact, priorities = args$priorities),
     ask = ipm_ai_ask(args$q, args$res, args$sc, args$st, history = args$history, language = args$language, compact = args$compact),
     read = ipm_ai_read(args$title, args$x, args$how, args$st, language = args$language),
     test = ipm_ai_test(args$st))
@@ -427,18 +427,20 @@ ipm_ui <- page_navbar(
       nav_panel("Action plan (AI)", value = "ai",
         explain(tagList("Writes a team-by-team action plan (issues with evidence, actions with owner and timing, interviewers to observe, modules to retrain) and answers questions about the results. ",
                         tags$b("Only aggregated statistics are sent to the AI model"), " - the team scorecard, flag rates per module and question, one-line readings of flagged questions, interviewer codes. No record-level data, household identifiers or names leave the server; click 'Preview what is sent to the AI' to see the full request (instructions, evidence and question) exactly as it is sent. Without AI, the rule-based plan gives the same structure from the standard action library."),
-                "Click 'Generate AI action plan' (30 seconds to 2 minutes) or 'Rule-based plan'. Check the plan against the flag tables before sharing it, especially any line marked 'check'. Download it in Word for the supervisors' debrief."),
+                "Click 'Generate AI action plan' (a window shows the size, cost and time and lets you choose the teams first; 1 to 5 minutes) or 'Rule-based plan'. Rule-based: the routine weekly check and the complete list of everything flagged; AI: a readable briefing for supervisors and managers; both: the AI plan to brief people, the rule-based plan as the full checklist behind it. Check the plan against the flag tables before sharing it, especially any line marked 'check'. Download it in Word for the supervisors' debrief."),
         layout_columns(col_widths = c(4, 8),
           card(card_header("AI model and action plan"),
             selectInput("ai_conn", "Connection", AI_CHOICES, width = "100%", selectize = FALSE),
             conditionalPanel("input.ai_conn == 'custom'",
               radioButtons("u_prov", NULL, c("Claude (Anthropic API)" = "anthropic", "Local model (Ollama)" = "ollama",
                                              "OpenAI-compatible (vLLM, LM Studio, OpenAI...)" = "openai")),
-              textInput("u_base", "Endpoint URL", width = "100%", placeholder = "Ollama: http://192.168.1.10:11434  |  vLLM: http://host:8000/v1"),
+              textInput("u_base", "Endpoint URL (filled in for the provider; change it if yours is different)", value = "https://api.anthropic.com", width = "100%",
+                        placeholder = "Ollama: http://192.168.1.10:11434  |  vLLM: http://host:8000/v1"),
               passwordInput("u_key", "API key (not needed for Ollama)", width = "100%"),
               actionButton("u_set", "Connect", width = "100%")),
             selectizeInput("ai_model", "Model", choices = NULL, width = "100%",
                            options = list(create = TRUE, placeholder = "List the models or type a name")),
+            uiOutput("ai_model_hint"),
             layout_columns(col_widths = c(6, 6), actionButton("ai_models", "List models", width = "100%"), actionButton("ai_test", "Test", width = "100%")),
             uiOutput("ai_status"),
             tags$hr(style = "margin:4px 0"),
@@ -446,6 +448,11 @@ ipm_ui <- page_navbar(
             checkboxInput("ai_compact", "Compact evidence (High/Medium teams only, about a third of the size: faster and better with local models)", FALSE),
             actionButton("ai_go", "Generate AI action plan", class = "btn-primary", width = "100%"),
             actionButton("rules_go", "Rule-based plan (no AI)", width = "100%"),
+            div(class = "small-note", style = "margin:2px 0 10px 0", tags$b("Which plan?"),
+              tags$ul(style = "padding-left:18px; margin:4px 0 0 0",
+                tags$li(tags$b("Rule-based: "), "the routine weekly check, and a complete list of everything flagged."),
+                tags$li(tags$b("AI: "), "the version you hand to supervisors or managers, a readable briefing with priorities and explanations."),
+                tags$li(tags$b("Both: "), "the AI plan to brief people, with the rule-based plan as the full checklist behind it."))),
             actionButton("ai_preview", "Preview what is sent to the AI", width = "100%"),
             downloadButton("plan_dl", "Download action plan (Word)", style = "width:100%")),
           card(card_header("Ask a question about the results"),
@@ -498,7 +505,7 @@ ipm_ui <- page_navbar(
         tags$li(tags$b("Data: "), "upload the latest export of the fieldwork data (.sav)."),
         tags$li(tags$b("Settings, datasets, teams, flags: "), "checked automatically - review them the first time, then save the settings."),
         tags$li(tags$b("Run: "), "computes everything."),
-        tags$li(tags$b("Results: "), "start with 'Summary & priorities' and 'Team scorecard' (priority of each team with the evidence), then 'Action plan (AI)' for a team-by-team plan and questions; check with the figures and the flag explorer; download the Word report and action plan to share.")),
+        tags$li(tags$b("Results: "), "start with 'Summary & priorities' and 'Team scorecard' (priority of each team with the evidence), then 'Action plan (AI)' for a team-by-team plan and questions (rule-based plan for the routine weekly check and the full list of what is flagged; AI plan for a readable briefing to supervisors and managers; or both); check with the figures and the flag explorer; download the Word report and action plan to share.")),
       p("Recommended rhythm: every 1-2 weeks from the 2nd-3rd week of fieldwork, with the last 2-3 weeks as period of analysis; share a limited number of priorities with the field teams each time."),
       tags$h5("How to read each output"),
       tags$dl(lapply(names(output_names), function(id) tagList(tags$dt(output_names[[id]]), tags$dd(howto[[id]] %||% ""))))),
@@ -564,7 +571,7 @@ ipm_server <- function(input, output, session) {
       report = { unlink(args$dir, recursive = TRUE); rep <- ipm_report(args$res, args$dir, progress = prog)
                  prog("Zipping all results"); unlink(args$zip); old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
                  utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq"); list(report = rep, zip = args$zip) },
-      plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact),
+      plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact, priorities = args$priorities),
       ask = ipm_ai_ask(args$q, args$res, args$sc, args$st, history = args$history, language = args$language, compact = args$compact),
       read = ipm_ai_read(args$title, args$x, args$how, args$st, language = args$language),
       test = ipm_ai_test(args$st))
@@ -1429,6 +1436,12 @@ ipm_server <- function(input, output, session) {
     if (c0$provider %in% c("ollama", "openai")) list_models(quiet = TRUE)        # local endpoints: list the installed models straight away
   })
   observeEvent(input$ai_models, list_models())
+  # endpoint filled in for the chosen provider, unless the user typed their own
+  u_urls <- c(anthropic = "https://api.anthropic.com", ollama = "http://localhost:11434", openai = "https://api.openai.com/v1")
+  observeEvent(input$u_prov, {
+    cur <- trimws(input$u_base %||% "")
+    if (!nzchar(cur) || cur %in% u_urls) updateTextInput(session, "u_base", value = u_urls[[input$u_prov]])
+  })
   observeEvent(input$u_set, {
     base <- trimws(input$u_base %||% "")
     rv$ai_user <- tryCatch(ipm_ai_settings(input$u_prov, model = NULL, api_key = input$u_key %||% "", base_url = if (nzchar(base)) base else NULL,
@@ -1488,12 +1501,50 @@ ipm_server <- function(input, output, session) {
   })
   output$prev_dl_plan <- downloadHandler(filename = function() "ipm_ai_request_plan.json", content = function(f) writeLines(rv$prev$plan$json, f))
   output$prev_dl_q <- downloadHandler(filename = function() "ipm_ai_request_question.json", content = function(f) writeLines(rv$prev$question$json, f))
+  # before sending: size, cost and time of the request, which teams to include, which model to use
+  model_advice <- function(st) {
+    m <- st$model %||% ""
+    if (st$provider == "anthropic") {
+      rec <- "Recommended: claude-sonnet-5-5 - good plans, fast and low cost. claude-opus-5-5 for the most careful plan (about twice the cost, slower). claude-haiku-5-5 is the cheapest but its plans are thinner. Older models (opus-4, sonnet-4, opus-5) cost more for less."
+      note <- if (startsWith(m, "claude-sonnet-5-5")) "You are using the recommended model." else if (startsWith(m, "claude-opus-5-5")) "You are using the most careful model." else sprintf("You are using %s.", m)
+      paste(note, rec)
+    } else if (st$provider == "ollama") "Local models: tick 'Compact evidence' and use a model of 14B or more (e.g. qwen2.5:14b); smaller models often miss teams or invent numbers."
+    else if (st$provider == "openai") "Use the provider's most capable model for the plan; tick 'Compact evidence' for small or local models."
+    else ""
+  }
+  output$ai_model_hint <- renderUI({ st <- ai_st(); a <- model_advice(st); if (nzchar(a)) div(class = "small-note", style = "margin-top:-6px; margin-bottom:8px", a) })
+  plan_scope <- function(x) switch(x %||% "hm", h = "High", hm = c("High", "Medium"), all = NULL)
   observeEvent(input$ai_go, {
     if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st()
     if (!isTRUE(st$ready)) { showNotification("No AI model ready: choose a connection and a model, or use the rule-based plan.", type = "warning"); return() }
-    start_job("ai_plan", "plan", list(res = rv$res, sc = rv$sc, st = st, language = input$ai_lang, compact = isTRUE(input$ai_compact)),
-      sprintf("%s is writing the action plan", st$model), if (st$provider == "ollama") "local models can take several minutes" else "30 seconds to 2 minutes",
+    n <- table(factor(rv$sc$teams$priority, levels = c("High", "Medium", "Low")))
+    showModal(modalDialog(title = sprintf("Send the action plan request to %s?", st$model), size = "m", easyClose = TRUE,
+      radioButtons("ai_scope", "Teams to include", width = "100%", selected = if (n[["High"]] + n[["Medium"]] > 10) "h" else "hm",
+                   choices = stats::setNames(c("hm", "h", "all"), c(sprintf("High and Medium priority teams (%d)", n[["High"]] + n[["Medium"]]),
+                                                                    sprintf("High priority teams only (%d) - smaller, quicker, cheaper", n[["High"]]),
+                                                                    sprintf("All teams (%d) - the model also looks at Low priority teams", sum(n))))),
+      uiOutput("ai_est"),
+      div(class = "small-note", style = "margin-top:10px", model_advice(st)),
+      footer = tagList(modalButton("Cancel"), actionButton("ai_send", "Send", class = "btn-primary"))))
+  })
+  output$ai_est <- renderUI({
+    req(input$ai_scope, rv$res, rv$sc); st <- ai_st()
+    e <- ipm_ai_estimate(rv$res, rv$sc, st, language = input$ai_lang %||% "English", compact = isTRUE(input$ai_compact), priorities = plan_scope(input$ai_scope))
+    k <- function(x) format(round(x, -2), big.mark = ",")
+    mins <- function(m) if (m[2] < 1) "under a minute" else sprintf("%s to %s minutes", if (m[1] < 1) "under 1" else round(m[1]), ceiling(m[2]))
+    big <- e$output_max > 24000
+    div(class = "bf-card", style = "padding:10px 14px",
+      tags$b(sprintf("%d team(s) in the plan", e$teams)), tags$br(),
+      sprintf("Sent: about %s tokens (the aggregated figures, no records). Answer: about %s tokens, up to %s if the model thinks at length.", k(e$input_tokens), k(e$output_tokens), k(e$output_max)), tags$br(),
+      if (e$local) sprintf("Cost: none (local model). Time: %s.", mins(e$minutes))
+      else sprintf("Cost: %s. Time: %s.", if (is.na(e$usd[1])) "not known for this model" else sprintf("about $%.2f, at most $%.2f (list prices)", e$usd[1], e$usd[2]), mins(e$minutes)),
+      if (big) div(class = "aiwarn", style = "margin-top:6px", "This is a large request: it may be slow or be cut off. Choose 'High priority teams only' or tick 'Compact evidence'."))
+  })
+  observeEvent(input$ai_send, {
+    removeModal(); st <- ai_st(); req(isTRUE(st$ready))
+    start_job("ai_plan", "plan", list(res = rv$res, sc = rv$sc, st = st, language = input$ai_lang, compact = isTRUE(input$ai_compact), priorities = plan_scope(input$ai_scope)),
+      sprintf("%s is writing the action plan", st$model), if (st$provider == "ollama") "local models can take several minutes" else "1 to 5 minutes",
       done = function(p) {
         if (inherits(p, "error")) { showNotification(job_error(p), type = "error", duration = NULL); return() }
         rv$plan <- p; r <- rv$res; r$action_plan <- p; rv$res <- r })
@@ -1507,7 +1558,7 @@ ipm_server <- function(input, output, session) {
       div(class = "teamplan", style = paste0("border-left-color:", col),
         tags$h5(sprintf("Team %s ", t$team), span(class = "prio", style = paste0("background:", col), toupper(t$priority))),
         div(t$headline),
-        if (length(t$issues)) li(lapply(t$issues, function(x) tagList(tags$b(x$issue), ": ", x$evidence))),
+        if (length(t$issues)) li(lapply(t$issues, function(x) tagList(tags$b(sub("[.][[:space:]]*$", "", x$issue %||% "")), ": ", x$evidence))),
         if (length(t$actions)) tags$table(tags$tr(tags$th("Action"), tags$th("Owner"), tags$th("When")),
                                           lapply(t$actions, function(a) tags$tr(tags$td(a$action), tags$td(a$owner), tags$td(a$timing)))),
         if (length(t$interviewers_to_observe)) div(tags$b("Interviewers to observe: "),

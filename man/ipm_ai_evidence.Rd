@@ -9,7 +9,8 @@ ipm_ai_evidence(
   sc = ipm_scorecard(res),
   max_teams = 40,
   team = NULL,
-  compact = FALSE
+  compact = FALSE,
+  priorities = NULL
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ ipm_ai_evidence(
 
 \item{compact}{smaller evidence for local models (about a third of the size): High/Medium priority teams only,
 3 readings per team, fewer interviewers, modules and survey-wide signals}
+
+\item{priorities}{rule-based priorities of the teams to include (e.g. "High", or c("High", "Medium")); NULL = all teams}
 }
 \description{
 Aggregated statistics only: survey totals, the team and interviewer scorecards, modules and questions

@@ -10,7 +10,8 @@ ipm_ai_plan(
   st = ipm_ai_settings(),
   language = "English",
   max_teams = 30,
-  compact = FALSE
+  compact = FALSE,
+  priorities = NULL
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ ipm_ai_plan(
 \item{max_teams}{maximum number of teams detailed}
 
 \item{compact}{compact evidence for local models (see ipm_ai_evidence())}
+
+\item{priorities}{rule-based priorities of the teams to include (e.g. "High", or c("High", "Medium")); NULL = all teams}
 }
 \description{
 Sends the evidence pack to the configured model and returns a validated team-by-team action plan

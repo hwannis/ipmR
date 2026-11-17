@@ -1,3 +1,12 @@
+# ipmR 0.7.0.9003 (development version)
+
+* Claude (Anthropic API): AI readings and questions were cut off ("output limit reached") because current Claude models think before answering and the thinking counts against the output limit; Claude requests now allow 16,000 output tokens, and the AI action plan 32,000 (a plan for 12 teams with a careful model such as Opus went past 16,000); Claude may take up to 15 minutes before the app gives up (was 5); the plan asks for one short sentence per issue and action (#70).
+* Before the AI action plan is sent, a window shows its size (tokens sent and expected back), the approximate cost at list prices and the time, and lets you choose the teams: High and Medium priority (default), High only (default when more than 10 teams are High or Medium) or all teams; a warning when the request is large. `ipm_ai_estimate()`; `ipm_ai_plan(priorities = )` (#72).
+* Model advice under the model box and in that window: claude-sonnet-5-5 recommended (good plans, fast, low cost), claude-opus-5-5 for the most careful plan, claude-haiku-5-5 the cheapest; for local models, compact evidence and 14B+ models (#73).
+* Action plan (app and Word): an issue ending with a full stop is no longer followed by ": " (".:") (#74).
+* Action plan page and Guide: which plan to use - rule-based for the routine weekly check and the complete list of everything flagged, AI for a readable briefing to supervisors and managers, both to brief people with the full checklist behind it (#75).
+* "My own connection": the endpoint is filled in when you choose the provider (Claude: https://api.anthropic.com, Ollama: http://localhost:11434, OpenAI: https://api.openai.com/v1); it can still be changed, and an address you typed is kept when you switch (#71).
+
 # ipmR 0.7.0.9002 (development version)
 
 * "Read this graph with AI" under each graph in Results > Figures, and "Read these tables with AI" in Data & questionnaires: a short reading of what stands out and what to check. Only the figures behind that graph or table are sent (aggregated counts, rates and test results; for the flag-distribution graphs, the flagged tests only), never the records. `ipm_ai_read()` (#13).
