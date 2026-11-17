@@ -985,7 +985,8 @@ ipm_server <- function(input, output, session) {
       div(class = "bf-top",
         div(div(class = "bf-meta", sprintf("%s · data up to %s · period of analysis %s", res$cfg$survey_name %||% "Survey", bf_date(last), b$survey$period %||% "-")),
             div(class = "bf-title", "Briefing"), div(class = "bf-meta", cmp_txt)),
-        div(downloadButton("bf_plan", "Supervisor briefs (Word)", class = "btn-sm btn-outline-primary"),
+        div(downloadButton("bf_html", "Briefing to share (HTML)", class = "btn-sm btn-outline-primary"),
+            downloadButton("bf_plan", "Supervisor briefs (Word)", class = "btn-sm btn-outline-primary"),
             actionButton("bf_more", "All results", class = "btn-sm btn-outline-secondary", icon = icon("table")))),
       div(class = "bf-kpis", kpis),
       div(class = "bf-cols",
@@ -1043,6 +1044,8 @@ ipm_server <- function(input, output, session) {
     footer = tagList(modalButton("Cancel"), actionButton("bf_forget_ok", "Forget the history", class = "btn-danger")))))
   observeEvent(input$bf_forget_ok, { removeModal(); req(rv$res); ipm_history_forget(rv$res); rv$cmp <- ipm_compare(rv$sc, list(), as.Date(NA))
     showNotification("History deleted.", type = "message") })
+  output$bf_html <- downloadHandler(filename = function() sprintf("IPM_briefing_%s.html", format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { req(rv$sc); ipm_briefing_html(rv$res, rv$sc, f, cmp = rv$cmp, actions = acts()) })
   output$bf_plan <- downloadHandler(filename = function() sprintf("supervisor_briefs_%s.docx", format(Sys.Date(), "%Y%m%d")),
     content = function(f) { req(rv$sc); ipm_supervisor_brief(rv$res, rv$sc, f, cmp = rv$cmp) })
 

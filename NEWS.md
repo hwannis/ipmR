@@ -1,3 +1,8 @@
+# ipmR 0.7.0.9001 (development version)
+
+* "Briefing to share (HTML)" on the briefing: one self-contained page to email or put on a shared drive for managers who do not use the app - top numbers, teams to act on with the first action and the follow-up, interviewers to observe, team health grid, questionnaire problems, resolved issues. Opens offline in any browser and prints on A4; codes and figures only, no records. `ipm_briefing_html()` (#69).
+* GitHub check uses actions/checkout@v5; the backlog lists #44-#68.
+
 # ipmR 0.7.0
 
 A new app built around what to act on. After a run it opens on a **Briefing** (teams to act on this week, interviewers to observe, questionnaire problems, team health grid), compares the run with the earlier runs of the same survey (new, persisting, resolved), has a page per team and per interviewer, a questionnaire heat map, a one-page supervisor brief per team and the follow-up of each issue. All of it reads the same list of issues (one rule engine). On a server, keep the run history in a persistent folder: set `IPM_HISTORY_DIR` to a folder mapped to a volume (otherwise it is lost when the container is rebuilt).

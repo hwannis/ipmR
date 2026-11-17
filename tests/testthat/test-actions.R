@@ -1,7 +1,7 @@
 # Phase 4c: action follow-up and questionnaire heat map
-act_res <- function(last = "2026-02-01") {
+act_res <- function(last = "2026-02-01", short = 12) {
   g <- data.table::CJ(dataset = "hh", team = 1:3, k = 1:3, woi = 1:3)
-  g[, interv := team * 10 + k][, median_minutes := ifelse(interv == 12, 15, 40)][, n := 10L]
+  g[, interv := team * 10 + k][, median_minutes := ifelse(interv %in% short, 15, 40)][, n := 10L]
   list(cfg = list(options = ipm_defaults(), survey_name = "Action test"),
        team_info = data.table::data.table(team = 1:3, team_label = c("T1", "T2", "T3")),
        data_summary = data.table::data.table(dataset = "hh", records = 270, first_day = as.Date("2026-01-05"), last_day = as.Date(last)),
@@ -44,4 +44,19 @@ test_that("the questionnaire heat map has one row per question and one cell per 
   expect_equal(ipm_question_heat(r, sc, hide_survey_wide = TRUE)$rows$row, "hh Q2")
   expect_equal(ipm_question_heat(r, sc, by = "module")$rows$row, "hh HC")
   expect_null(ipm_question_heat(list(outputs = list()), sc))
+})
+
+test_that("the shareable briefing is one self-contained UTF-8 page with the teams and the follow-up", {
+  dir <- tempfile("act"); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
+  r <- act_res(short = 11:13); sc <- ipm_scorecard(r); cmp <- ipm_history_update(r, sc, dir, save = TRUE)
+  expect_true("T1" %in% sc$teams[priority != "Low", team_label])
+  ipm_action_set(r, cmp$issues[level == "team" & team == 1]$key[1], "assigned", "Sup T1", dir = dir)
+  f <- tempfile(fileext = ".html"); on.exit(unlink(f), add = TRUE)
+  ipm_briefing_html(r, sc, f, cmp, ipm_actions(r, dir))
+  x <- paste(readLines(f, encoding = "UTF-8", warn = FALSE), collapse = "\n")
+  expect_match(x, "<meta charset=\"utf-8\">", fixed = TRUE)
+  expect_match(x, "Action test", fixed = TRUE)
+  expect_match(x, "Follow-up: 1 assigned", fixed = TRUE)
+  expect_match(x, "→", fixed = TRUE)
+  expect_false(grepl("<script|https?://", x))          # nothing to load from the internet
 })
