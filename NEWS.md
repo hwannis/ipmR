@@ -1,3 +1,7 @@
+# ipmR 0.7.0.9002 (development version)
+
+* "Read this graph with AI" under each graph in Results > Figures, and "Read these tables with AI" in Data & questionnaires: a short reading of what stands out and what to check. Only the figures behind that graph or table are sent (aggregated counts, rates and test results; for the flag-distribution graphs, the flagged tests only), never the records. `ipm_ai_read()` (#13).
+
 # ipmR 0.7.0.9001 (development version)
 
 * "Briefing to share (HTML)" on the briefing: one self-contained page to email or put on a shared drive for managers who do not use the app - top numbers, teams to act on with the first action and the follow-up, interviewers to observe, team health grid, questionnaire problems, resolved issues. Opens offline in any browser and prints on A4; codes and figures only, no records. `ipm_briefing_html()` (#69).

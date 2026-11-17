@@ -33,7 +33,7 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 11 | Figures: sharp when enlarged (vector/SVG, readable numbers below the dots), and all figures viewable on one scrolling page. | PM | done (0.6.0) |
 | 12 | Interactive flag plots: hovering a dot shows the flag table (answers of all interviewers of the team). | PM | done (0.6.0) |
 | 22 | Descriptive charts (outputs 2-8) cover the whole fieldwork by week, as in the Stata IPM; shade the weeks of the period of analysis on each chart, and offer an option to show only those weeks. | HW | done (0.6.0) |
-| 13 | AI-assisted reading of the Data & questionnaires table and other outputs. | PM | open |
+| 13 | AI-assisted reading of the Data & questionnaires table and other outputs. | PM | done (0.7.0.9002: tables and every figure) |
 
 ## Downloads and performance
 

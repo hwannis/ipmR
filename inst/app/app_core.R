@@ -140,6 +140,7 @@ bg_child <- function(what, args, pf, src, libs) {
       list(report = rep, zip = args$zip) },
     plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact),
     ask = ipm_ai_ask(args$q, args$res, args$sc, args$st, history = args$history, language = args$language, compact = args$compact),
+    read = ipm_ai_read(args$title, args$x, args$how, args$st, language = args$language),
     test = ipm_ai_test(args$st))
 }
 
@@ -460,7 +461,9 @@ ipm_ui <- page_navbar(
                  column(4, radioButtons("fig_mode", NULL, c("One graph" = "one", "All graphs of this output on one page" = "all"), inline = TRUE))),
         uiOutput("fig_howto"),
         conditionalPanel("input.fig_mode == 'one'",
-          div(style = "margin-bottom:6px", downloadButton("fig_svg", "Sharp version (SVG)", class = "btn-sm"), downloadButton("fig_png", "High-resolution image (PNG)", class = "btn-sm")),
+          div(style = "margin-bottom:6px", downloadButton("fig_svg", "Sharp version (SVG)", class = "btn-sm"), downloadButton("fig_png", "High-resolution image (PNG)", class = "btn-sm"),
+              actionButton("fig_read", tagList(icon("wand-magic-sparkles"), "Read this graph with AI"), class = "btn-sm btn-outline-primary")),
+          uiOutput("fig_read_out"),
           plotOutput("fig", height = "650px", hover = hoverOpts("fig_hover", delay = 150, delayType = "debounce"), click = "fig_click"),
           uiOutput("fig_point")),
         conditionalPanel("input.fig_mode == 'all'", uiOutput("fig_all"))),
@@ -476,6 +479,8 @@ ipm_ui <- page_navbar(
         uiOutput("tt_tables")),
       nav_panel("Data & questionnaires", value = "dsum",
         explain("Records, dates and interviewers per dataset, and completed questionnaires per team and day.", "Check that all datasets were analysed and that the dates and number of interviewers look right."),
+        div(style = "margin-bottom:8px", actionButton("dsum_read", tagList(icon("wand-magic-sparkles"), "Read these tables with AI"), class = "btn-sm btn-outline-primary")),
+        uiOutput("dsum_read_out"),
         tableOutput("dsum"), tableOutput("qpd")),
       nav_panel("Downloads", value = "downloads",
         explain("Builds the full IPM report (Word) with all graphs and the key findings, the flag tables per dataset and per team (Word), the anthropometry case listing (Excel) and tidy CSV files for dashboards.",
@@ -506,12 +511,12 @@ ipm_server <- function(input, output, session) {
   sdir <- file.path(tempdir(), paste0("ipm_", session$token)); dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
   upload_dirs <- character()                       # Shiny's own temporary copies of uploaded files
   rv <- reactiveValues(cfg = NULL, light = NULL, res = NULL, log = character(), report = NULL, zip = NULL, n_files = 0,
-                       sc = NULL, cmp = NULL, acts_tick = 0, act_key = NULL, plan = NULL, chat = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
+                       sc = NULL, cmp = NULL, acts_tick = 0, act_key = NULL, plan = NULL, chat = list(), reads = list(), ai_user = NULL, ai_test = NULL, prev = NULL, stale_model = NULL, listed = character(), jobs = 0L)
   cleanup <- function() {
     if (exists("kill_jobs")) kill_jobs()
     wipe(c(sdir, upload_dirs))
     isolate({ rv$cfg <- NULL; rv$light <- NULL; rv$res <- NULL; rv$report <- NULL; rv$zip <- NULL
-              rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); rv$ai_user <- NULL; rv$ai_test <- NULL })
+              rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); rv$reads <- list(); rv$ai_user <- NULL; rv$ai_test <- NULL })
     invisible(gc(verbose = FALSE))
   }
   session$onSessionEnded(function() cleanup())
@@ -561,6 +566,7 @@ ipm_server <- function(input, output, session) {
                  utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq"); list(report = rep, zip = args$zip) },
       plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact),
       ask = ipm_ai_ask(args$q, args$res, args$sc, args$st, history = args$history, language = args$language, compact = args$compact),
+      read = ipm_ai_read(args$title, args$x, args$how, args$st, language = args$language),
       test = ipm_ai_test(args$st))
   }
   job_error <- function(r) { e <- if (!is.null(r$parent)) r$parent else r; msg <- conditionMessage(e)
@@ -882,7 +888,7 @@ ipm_server <- function(input, output, session) {
   do_run <- function() {
     req(rv$cfg); if (job_running("run")) { showNotification("The analysis is already running.", type = "warning"); return() }
     cfg <- collect_cfg(); rv$log <- character(); rv$report <- NULL; rv$zip <- NULL
-    rv$res <- NULL; rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); gc(verbose = FALSE)
+    rv$res <- NULL; rv$sc <- NULL; rv$cmp <- NULL; rv$plan <- NULL; rv$chat <- list(); rv$reads <- list(); gc(verbose = FALSE)
     start_job("run", "run", list(cfg = cfg), "Running the IPM", if (BG_OK) "you can keep using the app; other users are not slowed down" else NULL, log = TRUE,
       done = function(r) {
         if (inherits(r, "error")) { m <- job_error(r); logm("ERROR:", m); showNotification(m, type = "error", duration = NULL); return() }
@@ -1311,6 +1317,37 @@ ipm_server <- function(input, output, session) {
       tagList(lapply(rev(ch), function(x) tagList(div(class = "chatq", x$q), div(class = "chata", md_html(x$a)))))
     })
   })
+
+  # ---------- AI reading of one table or graph (only its figures are sent) ----------
+  ai_read <- function(key, title, x, how = NULL) {
+    st <- ai_st()
+    if (!isTRUE(st$ready)) { showNotification("No AI model is set up: choose a connection under 7. Results > Action plan (AI).", type = "warning", duration = 8); return() }
+    if (job_running("ai_read")) { showNotification("The AI is already reading a table or graph.", type = "warning"); return() }
+    start_job("ai_read", "read", list(title = title, x = x, how = how, st = st, language = input$ai_lang %||% "English"),
+      sprintf("%s is reading '%s'", st$model, substr(title, 1, 60)), if (st$provider == "ollama") "local models: up to a few minutes" else NULL,
+      done = function(a) {
+        if (inherits(a, "error")) { showNotification(job_error(a), type = "error", duration = NULL); return() }
+        rv$reads[[key]] <- a })
+  }
+  read_box <- function(key) {
+    a <- rv$reads[[key]]; if (is.null(a)) return(NULL)
+    div(class = "bf-card aibox", tags$h4(icon("wand-magic-sparkles"), " AI reading"),
+        div(class = "hint", sprintf("By %s from the figures of this %s only (no records). Signals to verify, not proof.", a$model, if (key == "dsum") "page" else "graph")),
+        div(class = "chata", md_html(a$answer)))
+  }
+  observeEvent(input$fig_read, {
+    req(input$fig_pick); f <- figs()[[input$fig_pick]]; req(f)
+    ai_read(paste0("fig:", input$fig_pick), input$fig_pick, f$plot, f$how)
+  })
+  output$fig_read_out <- renderUI({ req(input$fig_pick); read_box(paste0("fig:", input$fig_pick)) })
+  observeEvent(input$dsum_read, {
+    res <- rv$res; req(res); q <- res$outputs$quesperday
+    x <- list(records_dates_interviewers_by_dataset = res$data_summary)
+    if (!is.null(q) && length(q$tables)) x$completed_questionnaires_by_day_and_team <- q$tables[[1]]
+    ai_read("dsum", "Data and questionnaires: records, dates and interviewers per dataset; completed questionnaires per team and day", x,
+            "Check that all datasets were analysed, that the dates and number of interviewers look right, and which teams worked on which days.")
+  })
+  output$dsum_read_out <- renderUI(read_box("dsum"))
 
   # ---------- run from the data page ----------
   observeEvent(input$run_quick, { nav_to("run"); do_run() })

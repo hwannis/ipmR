@@ -164,3 +164,21 @@ test_that("the summary lists highly flagged questions and questions flagged per 
   expect_true(all(c("q_tested", "q_flagged", "q_highly") %in% names(s$tables$modules)))
   expect_true(any(grepl("questions flagged at least once", s$sections$modules$bullets)))
 })
+
+test_that("an AI reading sends only the figures behind the graph or table", {
+  d <- data.table::data.table(team = c(1, 1, 2), interv = c(11, 12, 21), x = c(1, 1.1, 2), yf = "a", variable = "v1",
+                              p = c(1e-9, 0.5, 0.2), flag = c(1L, 0L, 0L), flag100 = c(100, 0, 0), team_label = c("T1", "T1", "T2"), interv_label = c("11 (T1)", "12 (T1)", "21 (T2)"))
+  g <- ggplot2::ggplot(d, ggplot2::aes(x, yf)) + ggplot2::geom_point() + ggplot2::geom_vline(xintercept = 4) + ggplot2::labs(title = "FLAGS")
+  pr <- ai_read_prompt("Flags", g, "how", max_rows = 4)
+  t1 <- pr$evidence$tables[[1]]
+  expect_equal(nrow(t1), 1)                                     # many tests: only the flagged one
+  expect_false(any(c("x", "yf", "flag100", "interv", "team") %in% names(t1)))
+  expect_equal(t1$interv_label, "11 (T1)")
+  expect_true(any(grepl("Reference line (x) at 4", fixed = TRUE, pr$evidence$notes))); expect_true("FLAGS" %in% pr$evidence$notes)
+  tb <- ai_read_prompt("Data", list(data.frame(day = as.Date("2026-01-05") + 0:4, n = c(1.234, 2, 3, 4, 5))), max_rows = 3)
+  expect_equal(tb$evidence$tables[[1]]$day[1], "2026-01-05"); expect_equal(nrow(tb$evidence$tables[[1]]), 3)
+  expect_true(any(grepl("first 3 of 5 rows", tb$evidence$notes)))
+  a <- ipm_ai_read("Data", data.frame(a = 1), st = ipm_ai_settings("mock"))
+  expect_match(a$answer, "Mock reading of Data"); expect_gt(a$sent, 0)
+  expect_error(ipm_ai_read("x", data.frame(a = 1), st = ipm_ai_settings("none")), "No AI provider")
+})
