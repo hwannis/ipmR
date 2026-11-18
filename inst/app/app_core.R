@@ -378,7 +378,7 @@ ipm_ui <- page_navbar(
             "Review the modules and the variables to ignore, then click 'Check flag settings' and go through the list: ideally every module is tested, and every variable that is not a direct question to the respondent or a direct observation is ignored. This takes time the first time (save the settings to reuse them). The advanced parameters reproduce the original IPM defaults; change them only if you know why."),
     uiOutput("flag_ui"),
     div(style = "border:1px solid #e3e3e3; padding:10px 16px; margin:12px 0", tags$h5(class = "sch", style = "margin-top:4px", "Check the flag settings"),
-      p(class = "small-note", "Lists every variable of the modules to test with its label and status (tested or ignored), as the check in the Stata application. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored, because they change the % of tests flagged: CAPI-filled and derived variables are almost never flagged, so they lower the % of a module and hide its real problems; identifiers and staff codes give meaningless flags. Review it the first time you set up a survey; the settings can then be saved and reused."),
+      tags$p(class = "small-note", "Lists every variable of the modules to test with its label and status (tested or ignored), as the check in the Stata application. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored, because they change the % of tests flagged: CAPI-filled and derived variables are almost never flagged, so they lower the % of a module and hide its real problems; identifiers and staff codes give meaningless flags. Review it the first time you set up a survey; the settings can then be saved and reused."),
       div(actionButton("fc_run", "Check flag settings", class = "btn-primary"), downloadButton("fc_dl", "Download the full list (CSV)", class = "btn-sm")),
       uiOutput("fc_problems"), DT::DTOutput("fc_modules"), DT::DTOutput("fc_vars")),
     card(card_header("Advanced parameters"),
@@ -401,7 +401,7 @@ ipm_ui <- page_navbar(
         actionButton("run", "RUN", class = "btn-primary btn-lg", width = "100%"),
         verbatimTextOutput("log", placeholder = TRUE) |> tagAppendAttributes(class = "log")),
       card(card_header("Settings file"),
-        p(class = "small-note", "Save the settings to reuse them with the next data export of the same survey (load them after uploading the data)."),
+        tags$p(class = "small-note", "Save the settings to reuse them with the next data export of the same survey (load them after uploading the data)."),
         downloadButton("cfg_download", "Save settings (YAML)"),
         fileInput("cfg_upload", "Load settings (YAML)", accept = c(".yml", ".yaml"), width = "100%"))))),
 
@@ -500,16 +500,16 @@ ipm_ui <- page_navbar(
   nav_item(input_dark_mode(id = "dark_mode", mode = "light")),
   nav_panel("Guide", value = "guide",
     card(card_header("About the Interviewer Performance Monitoring (IPM)"),
-      p("The IPM complements the MICS field check tables. While fieldwork is going on, it compares the work of each interviewer with that of his/her team-mates, who work in the same clusters at the same time and should therefore record similar answers. Large differences point to interviewers who may need support (or to questions that are not well understood) while there is still time to fix them."),
+      tags$p("The IPM complements the MICS field check tables. While fieldwork is going on, it compares the work of each interviewer with that of his/her team-mates, who work in the same clusters at the same time and should therefore record similar answers. Large differences point to interviewers who may need support (or to questions that are not well understood) while there is still time to fix them."),
       tags$ol(
         tags$li(tags$b("Data: "), "upload the latest export of the fieldwork data (.sav)."),
         tags$li(tags$b("Settings, datasets, teams, flags: "), "checked automatically - review them the first time, then save the settings."),
         tags$li(tags$b("Run: "), "computes everything."),
         tags$li(tags$b("Results: "), "start with 'Summary & priorities' and 'Team scorecard' (priority of each team with the evidence), then 'Action plan (AI)' for a team-by-team plan and questions (rule-based plan for the routine weekly check and the full list of what is flagged; AI plan for a readable briefing to supervisors and managers; or both); check with the figures and the flag explorer; download the Word report and action plan to share.")),
-      p("Recommended rhythm: every 1-2 weeks from the 2nd-3rd week of fieldwork, with the last 2-3 weeks as period of analysis; share a limited number of priorities with the field teams each time."),
+      tags$p("Recommended rhythm: every 1-2 weeks from the 2nd-3rd week of fieldwork, with the last 2-3 weeks as period of analysis; share a limited number of priorities with the field teams each time."),
       tags$h5("How to read each output"),
       tags$dl(lapply(names(output_names), function(id) tagList(tags$dt(output_names[[id]]), tags$dd(howto[[id]] %||% ""))))),
-    p(class = "small-note", sprintf("ipmR %s - R port of the Stata IPM application v7.0.0 developed by Pierre Martel for UNICEF MICS.", .int$version %||% "")))
+    tags$p(class = "small-note", sprintf("ipmR %s - R port of the Stata IPM application v7.0.0 developed by Pierre Martel for UNICEF MICS.", .int$version %||% "")))
 )
 
 ipm_server <- function(input, output, session) {
@@ -680,15 +680,15 @@ ipm_server <- function(input, output, session) {
   observeEvent(input$survey_name, if (!is.null(input$survey_name_d) && !identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name_d", value = input$survey_name))
   output$found_ui <- renderUI({
     cfg <- cur_cfg()
-    if (is.null(cfg)) return(p(class = "small-note", "No data loaded yet."))
+    if (is.null(cfg)) return(tags$p(class = "small-note", "No data loaded yet."))
     q <- names(cfg$datasets)[vapply(cfg$datasets, function(d) !is.null(d$result), logical(1))]
     div(div(class = "bignum", sprintf("%d files, %d questionnaires, %d teams", length(cfg$datasets), length(q), length(cfg$teams$ranges %||% character()))),
-        if (!is.null(cfg$fieldwork)) p(tags$b(fw_text(cfg$fieldwork))),
+        if (!is.null(cfg$fieldwork)) tags$p(tags$b(fw_text(cfg$fieldwork))),
         if (length(cfg$fieldwork$by_questionnaire) > 1) tags$table(class = "table table-sm", style = "width:auto; font-size:0.85em",
           tags$tr(tags$th("Questionnaire"), tags$th("First interview"), tags$th("Last interview"), tags$th("Records")),
           lapply(names(cfg$fieldwork$by_questionnaire), function(q) { z <- cfg$fieldwork$by_questionnaire[[q]]
             tags$tr(tags$td(q), tags$td(fmt_d(z$first)), tags$td(fmt_d(z$last)), tags$td(format(z$interviews, big.mark = ","))) })),
-        p(sprintf("Period of analysis proposed: from %s, %s days (%s; change it on the next page). Outputs available: %d of 9.",
+        tags$p(sprintf("Period of analysis proposed: from %s, %s days (%s; change it on the next page). Outputs available: %d of 9.",
                   if (is.null(cfg$period$start)) "-" else fmt_d(cfg$period$start), cfg$period$days,
                   if (!is.null(cfg$fieldwork) && cfg$fieldwork$days <= 21) "the whole fieldwork so far" else "the last 3 weeks of fieldwork",
                   sum(unlist(cfg$outputs)))))
@@ -703,7 +703,7 @@ ipm_server <- function(input, output, session) {
   observeEvent(input$pp_21, set_period(21)); observeEvent(input$pp_all, set_period(NULL))
   output$period_info <- renderUI({
     fw <- rv$cfg$fieldwork; st <- input$period_start; n <- input$period_days
-    if (is.null(fw)) return(p(class = "small-note", "Interview dates are shown here once the data are loaded."))
+    if (is.null(fw)) return(tags$p(class = "small-note", "Interview dates are shown here once the data are loaded."))
     first <- as.Date(fw$first); last <- as.Date(fw$last)
     msg <- if (length(st) && !is.na(st) && length(n) && !is.na(n)) {
       en <- st + n                                                  # as in the Stata IPM: start to start + extent, both included
@@ -796,7 +796,7 @@ ipm_server <- function(input, output, session) {
   })
 
   fc <- eventReactive(input$fc_run, { req(rv$light); ipm_flag_check(collect_cfg(), rv$light$meta) })
-  output$fc_problems <- renderUI({ x <- fc(); if (!length(x$problems)) return(p(class = "small-note", style = "color:#00833D", "No module without variables and no unknown variable to ignore."))
+  output$fc_problems <- renderUI({ x <- fc(); if (!length(x$problems)) return(tags$p(class = "small-note", style = "color:#00833D", "No module without variables and no unknown variable to ignore."))
     div(class = "aiwarn", tags$ul(lapply(x$problems, tags$li))) })
   output$fc_modules <- DT::renderDT({ x <- fc()
     DT::datatable(x$modules[, .(Dataset = dataset, Module = module, Variables = variables, Tested = tested, Ignored = ignored, `Ignored variables` = ignored_list)],
@@ -918,7 +918,7 @@ ipm_server <- function(input, output, session) {
   output$brief <- renderUI({
     if (is.null(rv$sc)) return(div(class = "bf bf-empty",
       tags$h3("Your briefing appears here after a run"),
-      p(style = "color:#5f6368", "Load the latest data export, check the settings and click Run. You then see what to act on this week, and - from the second run of the same survey - what is new, what persists and what was resolved."),
+      tags$p(style = "color:#5f6368", "Load the latest data export, check the settings and click Run. You then see what to act on this week, and - from the second run of the same survey - what is new, what persists and what was resolved."),
       actionButton("bf_start", "Load the data", class = "btn-primary")))
     b <- brief(); res <- rv$res; ds <- res$data_summary
     ai_all <- with_act(cur_issues())
@@ -1487,12 +1487,12 @@ ipm_server <- function(input, output, session) {
                                                               format(pv$parts[["evidence_and_request"]], big.mark = ","), format(pv$parts[["answer_format"]], big.mark = ",")))),
           tags$tr(tags$td(tags$b("Answer limit")), tags$td(sprintf("%s tokens%s", format(pv$max_output_tokens, big.mark = ","),
                                                                   if (!is.null(ctx)) sprintf("; Ollama context window requested: %s tokens (input + answer)", format(ctx, big.mark = ",")) else "")))),
-        p(class = "small-note", what),
+        tags$p(class = "small-note", what),
         downloadButton(id, "Download this request (JSON)", class = "btn-sm"),
         tags$pre(class = "json", style = "margin-top:8px", pv$json))
     }
     showModal(modalDialog(title = "Exactly what is sent to the AI model", size = "xl", easyClose = TRUE,
-      p(class = "small-note", "This is the full request, built by the same code that sends it: the instructions (system prompt), the evidence (aggregated statistics only - no record-level data, household identifiers or names), the request and, for the plan, the required answer format. The API key is sent in a header and is never shown."),
+      tags$p(class = "small-note", "This is the full request, built by the same code that sends it: the instructions (system prompt), the evidence (aggregated statistics only - no record-level data, household identifiers or names), the request and, for the plan, the required answer format. The API key is sent in a header and is never shown."),
       navset_tab(
         nav_panel("Action plan request", one(rv$prev$plan, "prev_dl_plan", "Sent when you click 'Generate AI action plan'.")),
         nav_panel("Question request", one(rv$prev$question, "prev_dl_q",
@@ -1571,7 +1571,7 @@ ipm_server <- function(input, output, session) {
                                     p$generated %||% "", if (!is.null(p$seconds)) sprintf(" in %s s", p$seconds) else "",
                                     if (!is.null(p$usage$input)) sprintf("; %s input / %s output tokens", format(p$usage$input, big.mark = ","), format(p$usage$output, big.mark = ",")) else "")),
       if (length(p$validation)) div(class = "aiwarn", tags$b("Automatic checks against the data: "), li(p$validation)),
-      tags$h5(style = "color:#1CABE2; font-weight:bold", "Overall assessment"), p(p$overall_assessment),
+      tags$h5(style = "color:#1CABE2; font-weight:bold", "Overall assessment"), tags$p(p$overall_assessment),
       if (length(p$survey_wide_issues)) tagList(tags$h5(style = "color:#1CABE2; font-weight:bold", "Survey-wide issues (question, translation, training)"),
         div(class = "teamplan", tags$table(tags$tr(tags$th("Issue"), tags$th("Evidence"), tags$th("Action"), tags$th("Owner")),
           lapply(p$survey_wide_issues, function(x) tags$tr(tags$td(x$issue), tags$td(x$evidence), tags$td(x$action), tags$td(x$owner)))))),
@@ -1596,7 +1596,7 @@ ipm_server <- function(input, output, session) {
         rv$chat <- c(rv$chat, list(list(q = q, a = a$answer, team = a$team))); updateTextAreaInput(session, "ai_q", value = "") })
   })
   output$chat <- renderUI({
-    ch <- rv$chat; if (!length(ch)) return(p(class = "small-note", "Answers use the same aggregated evidence as the plan (run the analysis first); when you name a team (e.g. 'T4' or 'team 4'), its flag tables (answer counts per interviewer) are added. Local models take 1-5 minutes per answer: watch the progress bar at the bottom right."))
+    ch <- rv$chat; if (!length(ch)) return(tags$p(class = "small-note", "Answers use the same aggregated evidence as the plan (run the analysis first); when you name a team (e.g. 'T4' or 'team 4'), its flag tables (answer counts per interviewer) are added. Local models take 1-5 minutes per answer: watch the progress bar at the bottom right."))
     tagList(lapply(rev(ch), function(x) tagList(div(class = "chatq", x$q, if (!is.na(x$team %||% NA)) span(class = "small-note", sprintf(" (with the flag tables of %s)", x$team))), div(class = "chata", md_html(x$a)))))
   })
 
@@ -1643,7 +1643,7 @@ ipm_server <- function(input, output, session) {
       div(style = "margin:10px 0 26px 0", tags$h6(style = "color:#1CABE2; font-weight:bold", n),
           tags$img(src = paste0("data:image/png;base64,", jsonlite::base64_enc(readBin(tf, "raw", file.info(tf)$size))), style = "width:100%; height:auto"))
     }))
-    tagList(p(class = "small-note", sprintf("%d graph(s) of '%s'%s.", length(nm), f$group, if (length(nm) > 40) " - first 40 shown" else "")), imgs)
+    tagList(tags$p(class = "small-note", sprintf("%d graph(s) of '%s'%s.", length(nm), f$group, if (length(nm) > 40) " - first 40 shown" else "")), imgs)
   })
   # flags by module: the flag table behind a circle
   fig_pt <- reactiveVal(NULL)
@@ -1659,11 +1659,11 @@ ipm_server <- function(input, output, session) {
   output$fig_point <- renderUI({
     f <- figs()[[input$fig_pick %||% ""]]
     if (is.null(f) || !identical(f$type, "module")) return(NULL)
-    np <- fig_pt(); if (is.null(np)) return(p(class = "small-note", "Point at (or tap) a circle to see the flag table of that interviewer and question."))
+    np <- fig_pt(); if (is.null(np)) return(tags$p(class = "small-note", "Point at (or tap) a circle to see the flag table of that interviewer and question."))
     tb <- Filter(function(z) z$dataset == np$dataset[1] && z$variable == np$varname[1] && z$interv == np$interv[1] && z$team == np$team[1], rv$res$outputs$flaganal$tables)
-    if (!length(tb)) return(p(class = "small-note", sprintf("Interviewer %s, question %s: flag table not available.", fmt_i(np$interv[1]), np$varname[1])))
+    if (!length(tb)) return(tags$p(class = "small-note", sprintf("Interviewer %s, question %s: flag table not available.", fmt_i(np$interv[1]), np$varname[1])))
     z <- tb[[1]]
-    card(card_header(z$title), p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
+    card(card_header(z$title), tags$p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
   })
 
   # ---------- results: flag explorer ----------
@@ -1680,7 +1680,7 @@ ipm_server <- function(input, output, session) {
     i <- input$flags_dt_rows_selected; req(i); f <- flagged()[i]
     tb <- Filter(function(z) z$dataset == f$dataset && z$variable == f$question && z$interv == f$interviewer, rv$res$outputs$flaganal$tables)
     req(length(tb) > 0); z <- tb[[1]]
-    card(card_header(z$title), p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
+    card(card_header(z$title), tags$p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
   })
 
   # ---------- results: flag tables by team ----------
@@ -1701,11 +1701,11 @@ ipm_server <- function(input, output, session) {
   output$tt_tables <- renderUI({
     g <- tt_sel(); req(length(g) > 0); shown <- head(g, 80)
     tagList(
-      p(class = "small-note", sprintf("%d flagged questions%s.", length(g), if (length(g) > 80) " - first 80 shown; download the Word file for all" else "")),
+      tags$p(class = "small-note", sprintf("%d flagged questions%s.", length(g), if (length(g) > 80) " - first 80 shown; download the Word file for all" else "")),
       lapply(shown, function(x) card(card_header(x$title),
-        p(class = "small-note", x$desc),
+        tags$p(class = "small-note", x$desc),
         lapply(seq_along(x$readings), function(k) div(class = "pattern", sprintf("p=%s: %s", signif(x$p[k], 2), x$readings[k]))),
-        if (length(x$interviewers) > 1) p(class = "small-note", "Several interviewers of this team are flagged on this question: their answers differ from each other (question possibly asked or understood differently within the team)."),
+        if (length(x$interviewers) > 1) tags$p(class = "small-note", "Several interviewers of this team are flagged on this question: their answers differ from each other (question possibly asked or understood differently within the team)."),
         df_html(x$table))))
   })
   output$tt_dl <- downloadHandler(

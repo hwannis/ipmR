@@ -125,3 +125,4 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | # | Issue | Source | Status |
 |---|---|---|---|
 | 76 | Two flag rates for the same team (T5: 5.0% in the scorecard, 4.3% in the issue "whole team has an excess of flags"): the scorecard counted all questions, the issues left out the questions flagged in most teams. The scorecard, interviewer table, rule-based plan, Word plan and AI evidence now use the rate without questionnaire problems, and say so. | HW | done (dev) |
+| 77 | The app does not start ("could not find function progression") when the R workspace has an object called `p` (a progressr progress counter restored from .RData on a work PC): the app's paragraphs used `p()`, now `tags$p()`. | HW | done (dev) |
