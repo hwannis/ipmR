@@ -119,3 +119,9 @@ Source: PM = Pierre Martel's review (Oct 2026), HW = Hrair, CL = found while tes
 | 66 | New "Questionnaire" page: questions (or modules) x teams, coloured by the share of tests flagged - a row dark in most teams is a questionnaire problem, a row dark in one or two teams is a team problem; point at a cell for the... | HW | done (0.7.0) |
 | 67 | Ask the AI from the team, interviewer and questionnaire pages: the question is asked about that team, interviewer or the questionnaire, with suggested questions; answers stay on the page | HW | done (0.7.0) |
 | 68 | Dark mode (switch in the top bar); phone layout (short title, cards two by two, tables scroll); one colour for medium priority everywhere; "Run now with these settings" on the data page, so a routine run is: drop the data,... | HW | done (0.7.0) |
+
+## After 0.8.0
+
+| # | Issue | Source | Status |
+|---|---|---|---|
+| 76 | Two flag rates for the same team (T5: 5.0% in the scorecard, 4.3% in the issue "whole team has an excess of flags"): the scorecard counted all questions, the issues left out the questions flagged in most teams. The scorecard, interviewer table, rule-based plan, Word plan and AI evidence now use the rate without questionnaire problems, and say so. | HW | done (dev) |

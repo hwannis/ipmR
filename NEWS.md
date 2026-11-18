@@ -1,3 +1,7 @@
+# ipmR (development version)
+
+* One flag rate for teams and interviewers: the scorecard ("% flagged", "x survey rate", "Flags (expected)"), the scorecard's interviewer table, the rule-based and Word action plans and the AI evidence now leave out the questions flagged in most teams, as the issues already did; before, a team could show two rates (e.g. 5.0% in the scorecard and 4.3% in "whole team has an excess of flags"). The overall survey rate and the flag analysis summary ("Flag rate by interviewer" in the report) still count all questions; the AI evidence also gives the survey rate without questionnaire problems. The figures on all questions are kept in the scorecard as `rate_all`, `ratio_all`, `tests_all`, `flags_all` (#76).
+
 # ipmR 0.8.0
 
 A shareable briefing, AI readings of the graphs and tables, and a safer, clearer AI action plan: before it is sent you see its size, cost and time, choose the teams and get a model recommendation.

@@ -129,6 +129,10 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
     tsx[, `:=`(rate_excl = flags_x / tests_x * 100, ratio_excl = (flags_x / tests_x) / Rx,
                p_excl = stats::pbinom(flags_x - 1, tests_x, Rx, lower.tail = FALSE))]
     ts <- merge(ts, tsx, by = "team", all.x = TRUE)
+    # one rate everywhere: the team columns shown (tests, flags, rate, ratio, expected) leave out the questions flagged in
+    # most teams, like the issues; the figures on all questions are kept as *_all
+    ts[, `:=`(tests_all = tests, flags_all = flags, rate_all = rate, ratio_all = ratio)]
+    ts[, `:=`(tests = tests_x, flags = flags_x, rate = rate_excl, ratio = ratio_excl, expected = tests_x * Rx, p_excess = p_excl)]
     teams <- merge(teams, ts, by = "team", all.x = TRUE)
 
     iv <- t[, .(tests = .N, flags = sum(flag)), by = .(team, interv)]
@@ -137,6 +141,8 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
     ivx[, `:=`(rate_excl = flags_x / tests_x * 100, ratio_excl = (flags_x / tests_x) / Rx,
                p_excl = stats::pbinom(flags_x - 1, tests_x, Rx, lower.tail = FALSE))]
     iv <- merge(iv, ivx, by = c("team", "interv"), all.x = TRUE)
+    iv[, `:=`(tests_all = tests, flags_all = flags, rate_all = rate, ratio_all = ratio)]
+    iv[, `:=`(tests = tests_x, flags = flags_x, rate = rate_excl, ratio = ratio_excl, p_excess = p_excl)]
     iv[, team_rate := ts$rate[match(team, ts$team)]]
 
     ms <- t[, .(tests = .N, flags = sum(flag), teams = uniqueN(team), teams_flagged = uniqueN(team[flag == 1]),
@@ -490,7 +496,7 @@ ipm_plan_rules <- function(sc, max_teams = 50) {
     mods <- if (!is.null(sc$team_modules)) head(sc$team_modules[team == h$team & flags >= 3 & rate >= 2 * module_rate][order(-excess), sprintf("%s %s", dataset, module)], 5) else character()
     list(team = h$team_label, priority = h$priority,
          headline = sprintf("%d warning sign(s), %d of high severity%s.", nrow(ts), sum(ts$severity == "high"),
-                            if (!is.na(h$rate)) sprintf("; %s of tests flagged (survey %s)", pctf(h$rate), pctf(s$flag_rate)) else ""),
+                            if (!is.na(h$rate)) sprintf("; %s of tests flagged (survey %s; questions flagged in most teams left out)", pctf(h$rate), pctf(s$flag_rate_excl %||% s$flag_rate)) else ""),
          issues = lapply(seq_len(min(nrow(ts), 8)), function(j) list(issue = if ("headline" %in% names(ts)) ts$headline[j] else gsub("_", " ", ts$type[j]), evidence = ts$evidence[j])),
          actions = acts,
          interviewers_to_observe = lapply(seq_len(nrow(ivs)), function(j) list(interviewer = fmt_int(ivs$interv[j]), reason = ivs$reason[j])),

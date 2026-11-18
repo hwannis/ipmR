@@ -59,6 +59,13 @@ test_that("questions flagged in most teams are questionnaire problems and do not
   expect_true(sc$questions[question == "HC1"]$survey_wide)
   expect_true(any(sc$signals[level == "survey"]$question == "HC1", na.rm = TRUE))
   expect_gt(sc$survey$flag_rate, sc$survey$flag_rate_excl)
+  # one rate everywhere: the scorecard's team and interviewer rates leave the questionnaire problems out, like the issues
+  tm <- sc$teams[!is.na(rate)]
+  expect_equal(tm$rate, tm$rate_excl); expect_equal(tm$ratio, tm$ratio_excl)
+  expect_true(all(tm$rate_all >= 0) && any(tm$tests < tm$tests_all))
+  expect_equal(sc$interviewers$rate, sc$interviewers$rate_excl)
+  ev <- ipm_ai_evidence(res, sc)
+  expect_equal(ev$survey$pct_flagged_without_questionnaire_problems, round(sc$survey$flag_rate_excl, 1))
   expect_false(any(grepl("HC1", sc$signals[level != "survey"]$evidence)))
   s <- ipm_summary(res, sc)
   expect_true(any(grepl("HC1", s$sections$modules$bullets)))

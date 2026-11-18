@@ -165,14 +165,15 @@ ipm_ai_evidence <- function(res, sc = ipm_scorecard(res), max_teams = 40, team =
     head(iv, if (compact) 25 else 60) } else NULL
   ev <- list(
     survey = list(name = s$name, period_of_analysis = s$period, records = s$records, datasets = s$datasets, teams = s$teams,
-                  flag_tests = s$tests, flags = s$flags, pct_flagged = r1(s$flag_rate %||% NA), nominal_flag_level_pct = s$levelsig * 100,
+                  flag_tests = s$tests, flags = s$flags, pct_flagged = r1(s$flag_rate %||% NA),
+                  pct_flagged_without_questionnaire_problems = r1(s$flag_rate_excl %||% NA), nominal_flag_level_pct = s$levelsig * 100,
                   descriptive_signals_cover_last_weeks = s$recent_weeks,
                   records_per_household = if (!is.null(fa$clustering)) as.list(stats::setNames(round(fa$clustering$per_household, 1), fa$clustering$dataset))),
     method = c("Flag analysis: for each question and interviewer, answers are compared with the rest of the same team (chi-square or t-test); flag = p < 0.001, so about 0.1% of tests would be flagged by chance alone (nominal level). Records of the same household or cluster are alike and flags are not independent of each other, so do not describe the flag rate as 'x times chance'; use it to compare teams, modules and interviewers.",
                "A flag is a statistical signal, not proof: it may reflect a misunderstood or misread question, misuse of answer categories, skipped questions, leading respondents, or genuinely different respondents.",
                "Questions flagged in many teams usually point to a question, translation or training problem rather than to interviewers.",
                "Files with several records per household (records_per_household above 1.5: household members, nets, births) flag more easily, because records of the same household are not independent; do not compare their flag rates directly with those of the questionnaire files.",
-               "Issues have three levels: survey (questionnaire problem: a question or module flagged in most teams - fix the question, translation or training, not the interviewers), team (the whole team differs from the other teams, or a module is flagged far more in the team) and interviewer (one interviewer differs from team-mates). Questions flagged in most teams are left out when teams and interviewers are compared.",
+               "Issues have three levels: survey (questionnaire problem: a question or module flagged in most teams - fix the question, translation or training, not the interviewers), team (the whole team differs from the other teams, or a module is flagged far more in the team) and interviewer (one interviewer differs from team-mates). Questions flagged in most teams are left out when teams and interviewers are compared: the flag_tests, flags, pct_flagged and ratio_to_survey_rate of teams and interviewers leave them out and are compared with the survey's pct_flagged_without_questionnaire_problems.",
                "priority_rule_based comes from a transparent rule set: High = the team as a whole has an excess of flags or 2+ high-severity issues; Medium = 1 high-severity issue or 3+ issues; Low = otherwise (questionnaire problems do not count). warning_points: high = 3, medium = 1. You may adjust priorities if the evidence justifies it."),
     teams = teams,
     interviewers = if (!is.null(ivs) && nrow(ivs)) lapply(seq_len(nrow(ivs)), function(i) list(team = ivs$team_label[i], interviewer = fmt_int(ivs$interv[i]),
@@ -546,6 +547,8 @@ ipm_plan_docx <- function(plan, file, sc = NULL, survey = "", period = "") {
     for (x in plan$most_problematic_modules) doc <- add_bullet(doc, sprintf("%s %s: %s Action: %s", x$dataset, x$module, x$why, x$action)) }
   if (!is.null(sc)) {
     doc <- add_heading(doc, "Team scorecard")
+    if (!is.null(sc$survey$flag_rate_excl))
+      doc <- add_text(doc, sprintf("%% flagged and x survey rate leave out the questions flagged in most teams (questionnaire problems), as in the issues below; survey rate on that basis %s.", pctf(sc$survey$flag_rate_excl)), 8, TRUE)
     tb <- sc$teams[, .(Team = team_label, Priority = priority, `Warning points` = points, `% flagged` = round(rate, 1), `x survey rate` = round(ratio, 1),
                        `Modules` = top_modules %||% "", `Interviewers of concern` = interviewers_of_concern %||% "")]
     tb[is.na(tb)] <- ""

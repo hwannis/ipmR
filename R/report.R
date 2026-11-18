@@ -122,7 +122,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
     if (!is.null(sc) && nrow(sc$teams)) {
       doc <- officer::body_add_break(doc)
       doc <- add_heading(doc, "Team scorecard and priorities", 11)
-      doc <- add_text(doc, "Priority: High = the team as a whole has an excess of flags, or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues; Low = otherwise. Questionnaire problems (questions flagged in most teams) do not count against teams. Points: high = 3, medium = 1. Details in team_action_plan.docx and data/scorecard_*.csv.", 8, TRUE)
+      doc <- add_text(doc, "Priority: High = the team as a whole has an excess of flags, or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues; Low = otherwise. Questionnaire problems (questions flagged in most teams) do not count against teams, and are left out of % flagged and x survey rate. Points: high = 3, medium = 1. Details in team_action_plan.docx and data/scorecard_*.csv.", 8, TRUE)
       tb <- sc$teams[, .(Team = team_label, Priority = priority, Points = points, Signals = signals, `% flagged` = round(rate, 1), `x survey rate` = round(ratio, 1),
                          `Modules` = top_modules, `Interviewers of concern` = interviewers_of_concern)]
       tb[is.na(tb)] <- ""
@@ -204,7 +204,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.8.0"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
+IPMR_VERSION <- "0.8.0.9001"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
 utils_pkgver <- function() IPMR_VERSION
 
 report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL, drawn = NULL, later = NULL) {
