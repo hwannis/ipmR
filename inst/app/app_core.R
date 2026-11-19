@@ -15,8 +15,27 @@ theme <- bs_theme(version = 5, primary = cyan, secondary = dark,
                   base_font = font_collection("Arial", "Helvetica", "sans-serif"),
                   "border-radius" = "0", "btn-border-radius" = "0", "card-border-radius" = "0")
 
-explain <- function(what, todo) div(class = "ipm-explain",
-  div(tags$b("What this page does. "), what), div(style = "margin-top:4px", tags$b("What you need to do. "), todo))
+explain <- function(what, todo) tags$details(class = "ipm-explain",
+  tags$summary(icon("circle-info"), " About this page"),
+  div(style = "margin-top:6px", tags$b("What it does. "), what), div(style = "margin-top:4px", tags$b("What you need to do. "), todo))
+
+# advanced analysis settings: one input per option of ipm_param_spec(), id "o_<option>", with its help as a tooltip
+PSPEC <- ipm_param_spec()
+adv_inputs <- function(group) {
+  d <- ipm_defaults()
+  tagList(lapply(names(PSPEC)[vapply(PSPEC, `[[`, "", "group") == group], function(n) { s <- PSPEC[[n]]; id <- paste0("o_", n)
+    lab <- tagList(s$label, " ", tooltip(icon("circle-info", class = "su-i"), s$help))
+    div(class = "su-adv-row", switch(s$type,
+      lgl = checkboxInput(id, lab, isTRUE(d[[n]])),
+      select = selectInput(id, lab, s$choices, d[[n]], width = "100%"),
+      numericInput(id, lab, d[[n]], min = s$min, max = s$max, step = s$step, width = "100%"))) }))
+}
+adv_read <- function(input) {                       # current values of the advanced inputs (NULL when not shown yet)
+  o <- lapply(names(PSPEC), function(n) { v <- input[[paste0("o_", n)]]; s <- PSPEC[[n]]
+    if (is.null(v) || (is.numeric(v) && is.na(v))) return(NULL)
+    if (s$type == "int") as.integer(v) else v })
+  names(o) <- names(PSPEC); o[!vapply(o, is.null, logical(1))]
+}
 
 var_choices <- function(meta, nm) {
   if (is.null(meta[[nm]])) return(c("(none)" = ""))
@@ -167,11 +186,45 @@ idle_js <- sprintf("
 ipm_ui <- page_navbar(
   title = tags$span(tags$b("IPM"), tags$span(class = "ttl-long", " Interviewer Performance Monitoring for MICS"),
                     tags$span(style = "font-size:0.7em; opacity:0.85; margin-left:10px", paste0("ipmR ", .int$version %||% ""))),
-  theme = theme, id = "nav", fillable = FALSE, bg = cyan, inverse = TRUE, selected = "data",
-  header = tags$head(tags$script(HTML(idle_js)), tags$style(HTML("
+  theme = theme, id = "nav", fillable = FALSE, bg = cyan, inverse = TRUE, selected = "setup",
+  header = tags$head(tags$script(HTML(idle_js)), tags$script(HTML("
+    $(document).on('shiny:connected', function(){ Shiny.addCustomMessageHandler('su_scroll', function(v){
+      setTimeout(function(){ var el = document.querySelector('#rev [data-value=\"' + v + '\"]'); if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'}); }, 400); }); });")), tags$style(HTML("
     .navbar .navbar-brand, .navbar .nav-link {color:white !important}
     .navbar .nav-link.active {border-bottom:3px solid white}
-    .ipm-explain {border-left:5px solid #1CABE2; background:#F2FAFD; padding:10px 14px; margin:6px 0 14px 0; font-size:0.93em}
+    .ipm-explain {border-left:4px solid #1CABE2; background:#F2FAFD; padding:6px 14px; margin:6px 0 14px 0; font-size:0.9em; border-radius:0 8px 8px 0}
+    .ipm-explain summary {cursor:pointer; color:#0b5a75; font-weight:600}
+    .su {max-width:1280px; margin:0 auto; padding:4px 4px 90px 4px}
+    .su-top {display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:10px 0 14px 0}
+    .su-steps {display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+    .su-step {display:flex; align-items:center; gap:8px; padding:6px 14px 6px 6px; border-radius:22px; background:#F3F4F6; color:#5f6368; cursor:pointer; font-size:0.92em; border:1px solid transparent}
+    .su-step .n {display:inline-flex; width:26px; height:26px; border-radius:50%; align-items:center; justify-content:center; background:white; font-weight:600; color:#5f6368}
+    .su-step.on {background:#E6F4FB; color:#0b5a75; border-color:#1CABE2} .su-step.on .n {background:#1CABE2; color:white}
+    .su-step.ok .n {background:#00833D; color:white} .su-step.off {opacity:0.55; cursor:default}
+    .su-sep {width:22px; height:2px; background:#d9dce1}
+    .su-adv .badge {margin-left:6px}
+    .su-t {font-weight:600}
+    .su-chip {display:inline-block; font-size:0.74em; font-weight:600; padding:2px 9px; border-radius:20px; margin-left:10px; vertical-align:1px}
+    .su-chip.ok {background:#E7F5EC; color:#0B6B33} .su-chip.warn {background:#FFF3D6; color:#7A5300} .su-chip.err {background:#FDE8E7; color:#A3120F}
+    .su-sum {font-size:0.82em; color:#5f6368; margin-left:10px; font-weight:400}
+    .su-bar {position:fixed; left:0; right:0; bottom:0; z-index:1030; background:rgba(255,255,255,0.97); border-top:1px solid #e6e8ec; box-shadow:0 -2px 10px rgba(0,0,0,0.05)}
+    .su-bar .in {max-width:1280px; margin:0 auto; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap}
+    .su-bar .msg {font-size:0.9em; color:#1f2a44} .su-bar .btns {display:flex; gap:8px}
+    .su-list {list-style:none; padding:0; margin:6px 0 10px 0} .su-list li {padding:5px 0; border-top:1px solid #eef0f3; font-size:0.92em}
+    .su-list li:first-child {border-top:0} .su-list .fa, .su-list svg {margin-right:6px}
+    .su-ok {color:#00833D} .su-wn {color:#B26A00} .su-er {color:#C4161C}
+    .su-check {border:1px solid #e6e8ec; border-radius:8px; padding:10px 14px; margin-top:12px}
+    .su-privacy, .su-files {margin-top:12px; font-size:0.9em} .su-privacy summary, .su-files summary {cursor:pointer; color:#2B3F87}
+    .su-adv-row .form-group {margin-bottom:10px} .su-i {color:#8a8f98; font-size:0.85em}
+    .su-chg {background:#FFF8E1; border:1px solid #F3D27A; border-radius:8px; padding:8px 10px; font-size:0.85em; margin:8px 0}
+    .su-chg .r {font-size:0.85em; margin-left:6px}
+    .accordion-button .su-chip {font-size:0.7em}
+    @media (max-width: 600px) {.su-sep {display:none} .su-step {padding:3px 10px 3px 3px; font-size:0.85em} .su-step .n {width:22px; height:22px}
+      .accordion-button .su-sum {display:none} .su-bar .in {padding:8px 10px}}
+    [data-bs-theme=dark] .su-step {background:#232833; color:#a8adb4} [data-bs-theme=dark] .su-step .n {background:#14171c; color:#a8adb4}
+    [data-bs-theme=dark] .su-step.on {background:#16242c; color:#e8eaed} [data-bs-theme=dark] .su-bar {background:rgba(20,23,28,0.97); border-color:#2e333b}
+    [data-bs-theme=dark] .su-bar .msg {color:#e8eaed} [data-bs-theme=dark] .su-chg {background:#2b2614; border-color:#6b5a1e}
+    [data-bs-theme=dark] .su-check, [data-bs-theme=dark] .su-list li {border-color:#2e333b}
     .howto {border-left:4px solid #374EA2; background:#F5F6FB; padding:8px 12px; margin:6px 0 10px 0; font-size:0.9em}
     .dsrow {border-bottom:1px solid #ddd; padding:6px 0}
     .dsname {font-weight:bold; font-size:1.1em; color:#1CABE2; padding-top:28px}
@@ -312,101 +365,98 @@ ipm_ui <- page_navbar(
         checkboxInput("qh_hide", "Hide those flagged in most teams (questionnaire problems)", FALSE)),
     uiOutput("qh_body")),
 
-  nav_menu(tagList(icon("sliders"), "Setup"), value = "setup",
-  # ---------------- 1. DATA ----------------
-  nav_panel("1. Data", value = "data",
-    explain("Loads the survey data files exported from CSPro/SPSS (hh, hl, wm, bh, ch, fs, mn ... in .sav or .dta format) and automatically recognises the MICS structure: which file is which questionnaire, the interviewer, result, date and time variables, the links between files, the teams and the modules to test. It works for any MICS survey (MICS5-MICS7) whatever the language of the labels.",
-            "Drop the folder of your latest data export (or its .sav files, or a .zip of it) on the box, or click the box to choose. Wait for the green confirmation, check the table, then go to the next step."),
-    layout_columns(col_widths = c(5, 7),
-      card(card_header("Load the survey datasets"),
-        data_drop("up_data"),
-        if (LOCAL_MODE) tags$details(style = "margin-top:6px; font-size:0.9em",
-          tags$summary("Very large files on this computer or a network drive? Read them where they are"),
-          div(style = "margin-top:8px", textInput("data_dir", NULL, value = getOption("ipmR.data_dir", ""), width = "100%", placeholder = "e.g. Z:/MICS/Somalia/21 Oct"),
-              actionButton("scan", "Read this folder", class = "btn-outline-primary btn-sm"))),
-        div(class = "howto", tags$b("Your data. "), sprintf("Files are processed only within your own session and are never shared with other users. Name and other free-text variables are removed when the files are read. All uploaded files, results and reports are deleted from the server when you close the browser tab, after %s minutes of inactivity, or immediately with the button below. Do not upload data you are not authorised to process on this server.", format(IDLE_MINUTES))),
-        actionButton("wipe", "Delete my data now", class = "btn-outline-danger")),
-      card(card_header("What was found"), uiOutput("found_ui"), uiOutput("name_box"), tableOutput("found_tbl"))),
-    div(style = "text-align:right", actionButton("go2", HTML("Next: survey settings &rarr;"), class = "btn-primary"))),
+  # ---------------- SETUP: 3 steps (data, review, run) with the advanced analysis settings on the side ----------------
+  nav_panel(tagList(icon("sliders"), "Setup"), value = "setup",
+    layout_sidebar(fillable = FALSE, border = FALSE,
+      sidebar = sidebar(id = "adv", position = "right", open = "closed", width = 420, title = "Advanced analysis",
+        tags$p(class = "small-note", "Change these only if you know why: they change which differences are flagged and which teams come first. The report lists every setting that differs from the defaults."),
+        radioButtons("preset", "Preset", choices = c(stats::setNames(names(ipm_presets()), vapply(ipm_presets(), `[[`, "", "label")), "Custom (changed by hand)" = "custom"),
+                     selected = "standard"),
+        uiOutput("preset_help"), uiOutput("adv_changed"),
+        accordion(id = "adv_groups", open = FALSE,
+          accordion_panel("Flag tests", value = "flags", adv_inputs("flags")),
+          accordion_panel("Issue rules and priorities", value = "rules", adv_inputs("rules")),
+          accordion_panel("Output details", value = "outputs", adv_inputs("outputs")))),
+      div(class = "su",
+        div(class = "su-top", uiOutput("stepper"),
+            actionButton("adv_open", tagList(icon("sliders"), " Advanced analysis", uiOutput("adv_badge", inline = TRUE)), class = "btn-outline-secondary btn-sm su-adv")),
+        navset_hidden(id = "step",
+          # ---- step 1: data ----
+          nav_panel_hidden("s_data",
+            explain("Loads the survey data files exported from CSPro/SPSS (hh, hl, wm, bh, ch, fs, mn ... in .sav or .dta format) and recognises the MICS structure: which file is which questionnaire, the interviewer, result, date and time variables, the links between files, the teams and the modules to test. It works for any MICS survey (MICS5-MICS7) whatever the language of the labels.",
+                    "Drop the folder of your latest data export (or its .sav files, or a .zip of it) on the box, type the survey name, then review the settings or run at once."),
+            layout_columns(col_widths = c(5, 7),
+              card(card_header("Load the survey data"),
+                data_drop("up_data"),
+                if (LOCAL_MODE) tags$details(style = "margin-top:6px; font-size:0.9em",
+                  tags$summary("Very large files on this computer or a network drive? Read them where they are"),
+                  div(style = "margin-top:8px", textInput("data_dir", NULL, value = getOption("ipmR.data_dir", ""), width = "100%", placeholder = "e.g. Z:/MICS/Somalia/21 Oct"),
+                      actionButton("scan", "Read this folder", class = "btn-outline-primary btn-sm"))),
+                tags$details(class = "su-privacy", tags$summary(icon("lock"), " Your data stay in your session"),
+                  div(class = "small-note", sprintf("Files are processed only within your own session and are never shared with other users. Name and other free-text variables are removed when the files are read. All uploaded files, results and reports are deleted from the server when you close the browser tab, after %s minutes of inactivity, or immediately with the button below. Do not upload data you are not authorised to process on this server.", format(IDLE_MINUTES)),
+                      div(style = "margin-top:8px", actionButton("wipe", "Delete my data now", class = "btn-outline-danger btn-sm"))))),
+              card(card_header("What was found"), uiOutput("found_ui"), uiOutput("name_box"),
+                   tags$details(class = "su-files", tags$summary("Files found"), tableOutput("found_tbl"))))),
+          # ---- step 2: review ----
+          nav_panel_hidden("s_review",
+            explain("Everything below was filled in from the data. Each part shows what was set and whether it needs a look: only the parts marked 'check' are open.",
+                    "Open a part to change it. The status updates as you edit; when nothing needs a look, run the analysis."),
+            accordion(id = "rev", multiple = TRUE, open = FALSE,
+              accordion_panel(value = "period", title = tagList(tags$span(class = "su-t", "Survey and period"), uiOutput("st_period", inline = TRUE)), icon = icon("calendar"),
+                uiOutput("iss_period"),
+                layout_columns(col_widths = c(6, 6),
+                  div(textInput("survey_name", "Name of the survey", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"),
+                      fluidRow(column(6, dateInput("period_start", "Period of analysis: first day", value = Sys.Date() - 21)),
+                               column(6, numericInput("period_days", "Extent (days)", value = 21, min = 1))),
+                      div(style = "margin:-6px 0 8px 0", tags$span(class = "small-note", "Set to: "),
+                          actionButton("pp_7", "Last 7 days", class = "btn-sm"), actionButton("pp_14", "Last 14 days", class = "btn-sm"),
+                          actionButton("pp_21", "Last 21 days", class = "btn-sm"), actionButton("pp_all", "Whole fieldwork", class = "btn-sm"))),
+                  div(uiOutput("period_info"),
+                      tags$p(class = "small-note", "The period of analysis (21 days recommended, normally the most recent 3 weeks) is used for the flag analysis and the anthropometry case listing; the other outputs cover the whole fieldwork.")))),
+              accordion_panel(value = "outputs", title = tagList(tags$span(class = "su-t", "Outputs"), uiOutput("st_outputs", inline = TRUE)), icon = icon("chart-column"),
+                uiOutput("iss_outputs"),
+                layout_columns(col_widths = c(5, 7),
+                  div(checkboxGroupInput("outputs", "Outputs", choices = stats::setNames(names(output_names), output_names), width = "100%"),
+                      checkboxGroupInput("hhm_groups", "Household member groups (output 4)", inline = TRUE,
+                                         choices = stats::setNames(names(hhm_defs), vapply(hhm_defs, `[[`, "", "label")))),
+                  div(tags$b("Variables for specific outputs"), uiOutput("extras_ui")))),
+              accordion_panel(value = "datasets", title = tagList(tags$span(class = "su-t", "Datasets"), uiOutput("st_datasets", inline = TRUE)), icon = icon("database"),
+                tags$p(class = "small-note", "For each data file: the interviewer, the result of the interview (1 = completed), the date and the start/end time. Files that are only part of a questionnaire (household members, birth history, bednets...) are linked to their parent questionnaire by key variables (cluster, household, line number) and take its interviewer and date. Month and year are taken from the two variables after the day, and minutes from the variable after each hour (MICS convention)."),
+                uiOutput("iss_datasets"), uiOutput("ds_ui")),
+              accordion_panel(value = "teams", title = tagList(tags$span(class = "su-t", "Teams"), uiOutput("st_teams", inline = TRUE)), icon = icon("users"),
+                uiOutput("iss_teams"),
+                layout_columns(col_widths = c(5, 7),
+                  div(tags$p(class = "small-note", "All comparisons are made within teams (an interviewer is compared with team-mates working in the same clusters), so correct teams are essential. Teams are labelled T1, T2 ... followed by the supervisor / team leader code, e.g. T3 (103)."),
+                      radioButtons("team_method", NULL, c("Interviewer number ranges (as in IPM)" = "ranges", "Team = value of a variable (e.g. supervisor number)" = "variable")),
+                      conditionalPanel("input.team_method == 'ranges'",
+                        textAreaInput("team_ranges", "One range per team (T1, T2, ...)", rows = 10, width = "100%"),
+                        fluidRow(column(4, textInput("pat_first", "Team 1 range", "10-19")), column(4, numericInput("pat_n", "No. of teams", 20, 1, 90)), column(4, numericInput("pat_step", "Step", 10, 1))),
+                        actionButton("pat_apply", "Apply pattern of team 1 to all teams", class = "btn-sm")),
+                      conditionalPanel("input.team_method == 'variable'", uiOutput("team_var_ui"))),
+                  div(tags$b("Interviewers by team (from the data)"), tableOutput("team_tbl")))),
+              accordion_panel(value = "flags", title = tagList(tags$span(class = "su-t", "Questions tested"), uiOutput("st_flags", inline = TRUE)), icon = icon("list-check"),
+                uiOutput("iss_flags"),
+                tags$p(class = "small-note", "Modules follow the MICS naming (HC* = all variables starting with HC). Identification variables are ignored, and 'unit' variables (e.g. PN3U days/weeks) are combined with the number that follows before testing. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored: CAPI-filled and derived variables are almost never flagged and lower the % of a module; identifiers and staff codes give meaningless flags."),
+                uiOutput("flag_ui"),
+                div(class = "su-check", div(actionButton("fc_run", "List every variable tested", class = "btn-outline-primary btn-sm"), downloadButton("fc_dl", "Download the list (CSV)", class = "btn-sm")),
+                  uiOutput("fc_problems"), DT::DTOutput("fc_modules"), DT::DTOutput("fc_vars"))))),
+          # ---- step 3: run ----
+          nav_panel_hidden("s_run",
+            explain("Runs all selected outputs: from a few seconds (early fieldwork) to 1-2 minutes (complete national survey). You can keep using the app while it runs.",
+                    "Check the summary, then click Run. You are taken to the briefing when it is done."),
+            layout_columns(col_widths = c(7, 5),
+              card(card_header("What will run"), uiOutput("run_summary"),
+                actionButton("run", tagList(icon("play"), " Run the analysis"), class = "btn-primary btn-lg", width = "100%"),
+                verbatimTextOutput("log", placeholder = TRUE) |> tagAppendAttributes(class = "log")),
+              card(card_header("Settings"),
+                uiOutput("saved_note"),
+                tags$p(class = "small-note", "To use the settings on another computer or server: save them to a file here, and load the file after uploading the data there."),
+                downloadButton("cfg_download", "Save settings (YAML)", class = "btn-sm"),
+                fileInput("cfg_upload", "Load settings (YAML)", accept = c(".yml", ".yaml"), width = "100%"))))),
+        uiOutput("su_bar")))),
 
-  # ---------------- 2. SETTINGS & OUTPUTS ----------------
-  nav_panel("2. Settings & outputs", value = "settings",
-    explain("Sets the survey name, the period of analysis and the outputs to produce, and identifies the variables needed for the household members, birth history and anthropometry outputs.",
-            "Check the survey name. The period of analysis (21 days recommended, normally the most recent 3 weeks) is used for the flag analysis and the anthropometry case listing; all other outputs use the whole fieldwork. Untick outputs you do not need, and check the variables in the boxes on the right (they were filled in automatically)."),
-    layout_columns(col_widths = c(6, 6),
-      card(card_header("Survey and period"),
-        textInput("survey_name", "Name of the survey", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"),
-        fluidRow(column(6, dateInput("period_start", "Period of analysis: first day", value = Sys.Date() - 21)),
-                 column(6, numericInput("period_days", "Extent (days)", value = 21, min = 1))),
-        div(style = "margin:-6px 0 8px 0", tags$span(class = "small-note", "Set to: "),
-            actionButton("pp_7", "Last 7 days", class = "btn-sm"), actionButton("pp_14", "Last 14 days", class = "btn-sm"),
-            actionButton("pp_21", "Last 21 days", class = "btn-sm"), actionButton("pp_all", "Whole fieldwork", class = "btn-sm")),
-        uiOutput("period_info"),
-        checkboxInput("o_period_weeks_only", "Descriptive charts (outputs 2-8 and FL): show only the weeks of the period of analysis (otherwise the whole fieldwork, with those weeks shaded)", FALSE),
-        checkboxGroupInput("outputs", "Outputs", choices = stats::setNames(names(output_names), output_names), width = "100%"),
-        checkboxGroupInput("hhm_groups", "Household member groups (output 4)", inline = TRUE,
-                           choices = stats::setNames(names(hhm_defs), vapply(hhm_defs, `[[`, "", "label")))),
-      card(card_header("Variables for specific outputs"), uiOutput("extras_ui"))),
-    div(style = "text-align:right", actionButton("go3", HTML("Next: datasets &rarr;"), class = "btn-primary"))),
-
-  # ---------------- 3. DATASETS ----------------
-  nav_panel("3. Datasets", value = "datasets",
-    explain("Shows, for each data file, the variables used to identify the interviewer, the result of the interview (1 = completed), the date and the start/end time of the interview. Files that are only part of a questionnaire (household members, birth history, maternal mortality, bednets...) have no interviewer or date of their own: they are linked to their parent questionnaire by key variables (cluster, household, line number).",
-            "Normally nothing: everything was filled in automatically. Correct a variable only if it is wrong, untick 'include' for files you do not want to analyse, then click 'Check settings'. Month and year are taken from the two variables after the day, and minutes from the variable after each hour (MICS convention)."),
-    actionButton("check", "Check settings against the data"), tableOutput("issues"),
-    uiOutput("ds_ui"),
-    div(style = "text-align:right", actionButton("go4", HTML("Next: teams &rarr;"), class = "btn-primary"))),
-
-  # ---------------- 4. TEAMS ----------------
-  nav_panel("4. Teams", value = "teams",
-    explain("Assigns each interviewer to a team. All comparisons are made within teams (an interviewer is compared with team-mates working in the same clusters), so correct teams are essential. Teams were derived automatically from the supervisor / team leader number; in the results each team is labelled T1, T2 ... followed by that code, e.g. T3 (103), so the field teams recognise it.",
-            "Check in the right-hand table that each team contains the right interviewers and that no interviewer is 'NOT ASSIGNED'. If needed, edit the ranges (one line per team, e.g. 102-106) or use the team-leader variable instead, then click 'Refresh'."),
-    layout_columns(col_widths = c(5, 7),
-      card(card_header("Team definition"),
-        radioButtons("team_method", NULL, c("Interviewer number ranges (as in IPM)" = "ranges", "Team = value of a variable (e.g. supervisor number)" = "variable")),
-        conditionalPanel("input.team_method == 'ranges'",
-          textAreaInput("team_ranges", "One range per team (T1, T2, ...)", rows = 12, width = "100%"),
-          fluidRow(column(4, textInput("pat_first", "Team 1 range", "10-19")), column(4, numericInput("pat_n", "No. of teams", 20, 1, 90)), column(4, numericInput("pat_step", "Step", 10, 1))),
-          actionButton("pat_apply", "Apply pattern of team 1 to all teams")),
-        conditionalPanel("input.team_method == 'variable'", uiOutput("team_var_ui"))),
-      card(card_header("Interviewers by team (from the data)"), actionButton("team_preview", "Refresh"), tableOutput("team_tbl"))),
-    div(style = "text-align:right", actionButton("go5", HTML("Next: flag analysis settings &rarr;"), class = "btn-primary"))),
-
-  # ---------------- 5. FLAGS ----------------
-  nav_panel("5. Flag settings", value = "flags",
-    explain("Defines which questions enter the flag analysis. Modules follow the MICS naming (HC* = all variables starting with HC). Identification variables (line numbers, IDs) are ignored. 'Unit' variables (e.g. PN3U days/weeks) are combined with the number that follows (PN3N) before testing.",
-            "Review the modules and the variables to ignore, then click 'Check flag settings' and go through the list: ideally every module is tested, and every variable that is not a direct question to the respondent or a direct observation is ignored. This takes time the first time (save the settings to reuse them). The advanced parameters reproduce the original IPM defaults; change them only if you know why."),
-    uiOutput("flag_ui"),
-    div(style = "border:1px solid #e3e3e3; padding:10px 16px; margin:12px 0", tags$h5(class = "sch", style = "margin-top:4px", "Check the flag settings"),
-      tags$p(class = "small-note", "Lists every variable of the modules to test with its label and status (tested or ignored), as the check in the Stata application. Variables that are not questions to the respondent or direct observations (identifiers, CAPI-filled, derived, counts) should be ignored, because they change the % of tests flagged: CAPI-filled and derived variables are almost never flagged, so they lower the % of a module and hide its real problems; identifiers and staff codes give meaningless flags. Review it the first time you set up a survey; the settings can then be saved and reused."),
-      div(actionButton("fc_run", "Check flag settings", class = "btn-primary"), downloadButton("fc_dl", "Download the full list (CSV)", class = "btn-sm")),
-      uiOutput("fc_problems"), DT::DTOutput("fc_modules"), DT::DTOutput("fc_vars")),
-    card(card_header("Advanced parameters"),
-      layout_columns(col_widths = c(2, 2, 2, 2, 2, 2, 12),
-        numericInput("o_levelsig", "Significance level", 0.001, 0, 1, 0.0005),
-        numericInput("o_test_min", "Min. obs per interviewer", 5, 1),
-        numericInput("o_max_uniq", "Max. distinct values (categorical)", 34, 2),
-        numericInput("o_highly_flag", "Highly flagged (%)", 10, 1),
-        selectInput("o_woi_anchor", "Week 1 anchor", c("Per dataset (IPM)" = "dataset", "Survey-wide (hh)" = "survey")),
-        checkboxInput("o_test_min_nonmissing", "Min. obs counted on answered cases", TRUE),
-        checkboxInput("o_stata_compat", "Stata-compatible numbers (period of start + days, i.e. one day more; records up to 6 days before week 1 counted in week 1; min. obs on records)", FALSE))),
-    div(style = "text-align:right", actionButton("go6", HTML("Next: run &rarr;"), class = "btn-primary"))),
-
-  # ---------------- 6. RUN ----------------
-  nav_panel("6. Run", value = "run",
-    explain("Runs all selected outputs. Computation takes from a few seconds (early fieldwork) to 2-3 minutes (complete national survey).",
-            "Click RUN and wait for the progress bar to finish; you are then taken to the results. You can also save your settings (YAML) to reuse them next time with 'Load settings'."),
-    layout_columns(col_widths = c(5, 7),
-      card(card_header("Run the analysis"),
-        actionButton("run", "RUN", class = "btn-primary btn-lg", width = "100%"),
-        verbatimTextOutput("log", placeholder = TRUE) |> tagAppendAttributes(class = "log")),
-      card(card_header("Settings file"),
-        tags$p(class = "small-note", "Save the settings to reuse them with the next data export of the same survey (load them after uploading the data)."),
-        downloadButton("cfg_download", "Save settings (YAML)"),
-        fileInput("cfg_upload", "Load settings (YAML)", accept = c(".yml", ".yaml"), width = "100%"))))),
-
-  # ---------------- 7. RESULTS ----------------
-  nav_panel("7. Results", value = "results",
+  # ---------------- RESULTS ----------------
+  nav_panel(tagList(icon("chart-line"), "Results"), value = "results",
     navset_tab(id = "restabs",
       nav_panel("Summary & priorities", value = "summary",
         explain("Automatic reading of all results: overall level of interviewer effects, most problematic modules and questions, teams and interviewers that may need refresher training, supervision or observation, and other warning signs (short interviews, low completion, omitted household members or deaths, height heaping).",
@@ -421,7 +471,7 @@ ipm_ui <- page_navbar(
                 "Start with the High-priority teams. Click a team in the first table to filter the list of warning signs. The same evidence is used by the action plan (next tab)."),
         uiOutput("sc_kpis"),
         tags$h5(class = "sch", "Teams (highest priority first)"), DT::DTOutput("sc_teams"),
-        div(class = "howto", tags$b("How to read: "), "Each issue is a questionnaire problem (question or module flagged in most teams - not counted against teams), a whole-team issue (the team differs from the other teams) or an interviewer issue (one interviewer differs from team-mates). High priority = a team-wide excess of flags (at least 1.5 times the survey rate, binomial p < 0.01, questionnaire problems left out) or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues. Points (3 per high, 1 per medium) only order the teams. '% flagged' and 'x survey rate' leave out the questions flagged in most teams, like the issues: 'x survey rate' compares the team's % of flagged tests with the survey on the same basis (1 = average)."),
+        div(class = "howto", tags$b("How to read: "), "Each issue is a questionnaire problem (question or module flagged in most teams - not counted against teams), a whole-team issue (the team differs from the other teams) or an interviewer issue (one interviewer differs from team-mates). Priority, with the standard settings (Setup > Advanced analysis): High = a team-wide excess of flags (at least 1.5 times the survey rate, binomial p < 0.01, questionnaire problems left out) or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues. Points (3 per high, 1 per medium) only order the teams. '% flagged' and 'x survey rate' leave out the questions flagged in most teams, like the issues: 'x survey rate' compares the team's % of flagged tests with the survey on the same basis (1 = average)."),
         tags$h5(class = "sch", "Warning signs with evidence and standard action"), DT::DTOutput("sc_signals"),
         tags$h5(class = "sch", "Interviewers"), DT::DTOutput("sc_interv")),
       nav_panel("Action plan (AI)", value = "ai",
@@ -602,9 +652,25 @@ ipm_server <- function(input, output, session) {
     rv$res <- readRDS(pre); rv$sc <- tryCatch(ipm_scorecard(rv$res), error = function(e) NULL)
     rv$cmp <- tryCatch(ipm_history_update(rv$res, rv$sc), error = function(e) NULL) })
 
-  nav_to <- function(v) bslib::nav_select("nav", v)
-  observeEvent(input$go2, nav_to("settings")); observeEvent(input$go3, nav_to("datasets"))
-  observeEvent(input$go4, nav_to("teams")); observeEvent(input$go5, nav_to("flags")); observeEvent(input$go6, nav_to("run"))
+  # Setup is one page in 3 steps; the old page names lead to the step (and the part of the review) they were
+  step_of <- c(data = "s_data", settings = "s_review", datasets = "s_review", teams = "s_review", flags = "s_review", run = "s_run")
+  part_of <- c(settings = "period", datasets = "datasets", teams = "teams", flags = "flags")
+  cur_step <- reactiveVal("s_data")
+  go_step <- function(s) { cur_step(s); bslib::nav_select("step", s)
+    if (s == "s_review") {                       # open only the parts that need a look (none: all closed)
+      st <- tryCatch(isolate(setup_status()), error = function(e) NULL); if (is.null(st)) return(invisible())
+      w <- names(Filter(function(z) z$status != "ok", st))
+      if (length(w)) accordion_panel_set("rev", w) else accordion_panel_close("rev", TRUE) } }
+  nav_to <- function(v) {
+    if (v %in% names(step_of)) { bslib::nav_select("nav", "setup"); go_step(step_of[[v]])
+      if (!is.na(part_of[v])) accordion_panel_open("rev", part_of[[v]]) }
+    else bslib::nav_select("nav", v)
+  }
+  observeEvent(input$go_step, go_step(input$go_step))
+  observeEvent(input$su_next, go_step(c(s_data = "s_review", s_review = "s_run")[[cur_step()]]))
+  observeEvent(input$su_back, go_step(c(s_review = "s_data", s_run = "s_review")[[cur_step()]]))
+  observeEvent(input$su_run, { go_step("s_run"); do_run() })
+  observeEvent(input$adv_open, toggle_sidebar("adv"))
 
   # ---------- data loading ----------
   ingest <- function(paths, names) {
@@ -651,47 +717,83 @@ ipm_server <- function(input, output, session) {
     updateTextAreaInput(session, "team_ranges", value = paste(cfg$teams$ranges, collapse = "\n"))
     updateCheckboxGroupInput(session, "outputs", selected = names(cfg$outputs)[unlist(cfg$outputs)])
     updateCheckboxGroupInput(session, "hhm_groups", selected = cfg$hhm_groups)
-    o <- cfg$options
-    updateNumericInput(session, "o_levelsig", value = o$levelsig); updateNumericInput(session, "o_test_min", value = o$test_min)
-    updateNumericInput(session, "o_max_uniq", value = o$max_uniq); updateNumericInput(session, "o_highly_flag", value = o$highly_flag)
-    updateSelectInput(session, "o_woi_anchor", selected = o$woi_anchor); updateCheckboxInput(session, "o_test_min_nonmissing", value = isTRUE(o$test_min_nonmissing))
-    updateCheckboxInput(session, "o_stata_compat", value = isTRUE(o$stata_compat))
-    updateCheckboxInput(session, "o_period_weeks_only", value = isTRUE(o$period_weeks_only))
+    set_adv(cfg$options)
+  }
+  set_adv <- function(o) {                       # advanced inputs from a set of options (and the preset they match)
+    o <- utils::modifyList(ipm_defaults(), o %||% list())
+    for (n in names(PSPEC)) { id <- paste0("o_", n); s <- PSPEC[[n]]
+      switch(s$type, lgl = updateCheckboxInput(session, id, value = isTRUE(o[[n]])), select = updateSelectInput(session, id, selected = o[[n]]),
+             updateNumericInput(session, id, value = o[[n]])) }
+    m <- .int$match_preset(o); adv_pending_set(m %|na|% "custom")
+    updateRadioButtons(session, "preset", selected = m %|na|% "custom")
+  }
+  `%|na|%` <- function(a, b) if (length(a) && !is.na(a)) a else b
+  adv_pending <- reactiveVal(NULL)
+  adv_pending_set <- function(p) adv_pending(list(p = p, t = Sys.time()))
+  use_settings <- function(cfg, what) {          # settings from a file or remembered: datasets of this export only, its dates
+    keep <- intersect(names(cfg$datasets), names(rv$cfg$datasets))
+    if (!length(keep)) { showNotification(sprintf("The %s do not match the uploaded datasets.", what), type = "error"); return(FALSE) }
+    cfg$datasets <- cfg$datasets[keep]; cfg$fieldwork <- rv$cfg$fieldwork
+    if (is.null(cfg$period$start)) cfg$period$start <- rv$cfg$period$start
+    cfg$saved <- NULL; cfg$ipmR_version <- NULL
+    apply_cfg(cfg); TRUE
   }
   observeEvent(input$cfg_upload, {
-    req(rv$cfg); cfg <- read_config(input$cfg_upload$datapath)
-    keep <- intersect(names(cfg$datasets), names(rv$cfg$datasets))
-    if (!length(keep)) { showNotification("The settings file does not match the uploaded datasets.", type = "error"); return() }
-    cfg$datasets <- cfg$datasets[keep]; cfg$fieldwork <- rv$cfg$fieldwork; apply_cfg(cfg)
-    showNotification("Settings loaded.", type = "message")
+    req(rv$cfg); if (use_settings(read_config(input$cfg_upload$datapath), "settings in the file")) showNotification("Settings loaded.", type = "message")
   })
 
-  # survey name asked on the data page too (same value as on the settings page)
+  # survey name asked on the data page too (same value as in the review); settings remembered for that name can be used at once
+  svy_names <- reactive({ input$su_run; input$run; tryCatch(ipm_settings_list(), error = function(e) data.frame(name = character())) })
+  saved_cfg <- reactive({ nm <- trimws(input$survey_name %||% ""); req(rv$cfg, nzchar(nm)); ipm_settings_load(nm) })
+  saved_d <- debounce(saved_cfg, 600)
   output$name_box <- renderUI({
     req(rv$cfg)
-    div(class = "name-box",
-        textInput("survey_name_d", tagList(tags$b("Name of the survey"), " - shown on the briefing and the reports, and used to keep the run history of this survey apart from others"),
-                  value = isolate(input$survey_name) %||% "", width = "100%", placeholder = "e.g. Madagascar MICS7 2025"),
+    ti <- textInput("survey_name_d", tagList(tags$b("Name of the survey"), " - shown on the briefing and the reports, and used to keep the run history and the settings of this survey"),
+                    value = isolate(input$survey_name) %||% "", width = "100%", placeholder = "e.g. Madagascar MICS7 2025")
+    nms <- isolate(svy_names())$name
+    if (length(nms)) ti <- htmltools::tagQuery(ti)$find("input")$addAttrs(list = "svy_list", autocomplete = "off")$allTags()
+    div(class = "name-box", ti, if (length(nms)) tags$datalist(id = "svy_list", lapply(nms, function(n) tags$option(value = n))),
+        uiOutput("saved_offer"),
         div(style = "display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 10px 0",
-            actionButton("run_quick", tagList(icon("play"), " Run now with these settings"), class = "btn-primary"),
-            span(class = "small-note", "or check the setup steps first (Setup menu: period, outputs, teams, flag settings).")))
+            actionButton("run_quick", tagList(icon("play"), " Run now"), class = "btn-primary"),
+            actionButton("go_review", tagList("Review the settings ", icon("arrow-right")), class = "btn-outline-primary"),
+            span(class = "small-note", "Everything was filled in from the data; the review shows what needs a look.")))
   })
+  output$saved_offer <- renderUI({
+    s <- tryCatch(saved_d(), error = function(e) NULL); if (is.null(s)) return(NULL)
+    if (identical(used_saved(), s$saved)) return(div(class = "small-note", style = "margin:-6px 0 8px 0", icon("circle-check", class = "su-ok"),
+                                                     sprintf(" Using the settings of the last run (saved %s).", s$saved %||% "earlier")))
+    div(class = "su-chg", style = "background:#E6F4FB; border-color:#9fd6ee", icon("clock-rotate-left"),
+        sprintf(" Settings of the last run of %s found (saved %s).", s$survey_name, s$saved %||% "earlier"),
+        actionButton("use_saved", "Use them", class = "btn-sm btn-primary", style = "margin-left:8px"))
+  })
+  used_saved <- reactiveVal(NULL)
+  observeEvent(input$use_saved, { s <- saved_d(); req(s)
+    if (use_settings(.int$normalise(s), "remembered settings")) { used_saved(s$saved %||% "")
+      showNotification("The settings of the last run are used: check them in the review, or run now.", type = "message", duration = 6) } })
+  observeEvent(input$go_review, go_step("s_review"))
   observeEvent(input$survey_name_d, if (!identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name", value = input$survey_name_d))
   observeEvent(input$survey_name, if (!is.null(input$survey_name_d) && !identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name_d", value = input$survey_name))
   output$found_ui <- renderUI({
     cfg <- cur_cfg()
-    if (is.null(cfg)) return(tags$p(class = "small-note", "No data loaded yet."))
+    if (is.null(cfg)) return(tags$p(class = "small-note", "No data loaded yet: drop the data export on the box."))
     q <- names(cfg$datasets)[vapply(cfg$datasets, function(d) !is.null(d$result), logical(1))]
-    div(div(class = "bignum", sprintf("%d files, %d questionnaires, %d teams", length(cfg$datasets), length(q), length(cfg$teams$ranges %||% character()))),
-        if (!is.null(cfg$fieldwork)) tags$p(tags$b(fw_text(cfg$fieldwork))),
-        if (length(cfg$fieldwork$by_questionnaire) > 1) tags$table(class = "table table-sm", style = "width:auto; font-size:0.85em",
-          tags$tr(tags$th("Questionnaire"), tags$th("First interview"), tags$th("Last interview"), tags$th("Records")),
-          lapply(names(cfg$fieldwork$by_questionnaire), function(q) { z <- cfg$fieldwork$by_questionnaire[[q]]
-            tags$tr(tags$td(q), tags$td(fmt_d(z$first)), tags$td(fmt_d(z$last)), tags$td(format(z$interviews, big.mark = ","))) })),
-        tags$p(sprintf("Period of analysis proposed: from %s, %s days (%s; change it on the next page). Outputs available: %d of 9.",
-                  if (is.null(cfg$period$start)) "-" else fmt_d(cfg$period$start), cfg$period$days,
-                  if (!is.null(cfg$fieldwork) && cfg$fieldwork$days <= 21) "the whole fieldwork so far" else "the last 3 weeks of fieldwork",
-                  sum(unlist(cfg$outputs)))))
+    st <- tryCatch(setup_status(), error = function(e) NULL)
+    if (is.null(st)) return(tags$p(class = "small-note", icon("spinner", class = "fa-spin"), " Checking the settings..."))
+    li <- function(ok, txt) tags$li(if (isTRUE(ok)) icon("circle-check", class = "su-ok") else icon("triangle-exclamation", class = "su-wn"), txt)
+    div(tags$ul(class = "su-list",
+          li(length(q) > 0, sprintf("%d files read: %d questionnaires, %d linked files", length(cfg$datasets), length(q), sum(vapply(cfg$datasets, function(d) !is.null(d$parent), logical(1))))),
+          if (!is.null(cfg$fieldwork)) li(TRUE, fw_text(cfg$fieldwork)) else li(FALSE, "No interview dates found"),
+          li(st$teams$status == "ok", st$teams$text),
+          li(isTRUE(st$period$period_ok), sprintf("Period of analysis proposed: %s, %s days (%s)", if (is.null(cfg$period$start)) "-" else fmt_d(cfg$period$start), cfg$period$days,
+                  if (!is.null(cfg$fieldwork) && cfg$fieldwork$days <= 21) "the whole fieldwork so far" else "the last 3 weeks")),
+          li(st$outputs$status == "ok", st$outputs$text),
+          if (!isTRUE(st$period$named)) li(FALSE, "Type the name of the survey below")),
+        if (length(cfg$fieldwork$by_questionnaire) > 1) tags$details(class = "su-files", tags$summary("Interview dates per questionnaire"),
+          tags$table(class = "table table-sm", style = "width:auto; font-size:0.85em",
+            tags$tr(tags$th("Questionnaire"), tags$th("First interview"), tags$th("Last interview"), tags$th("Records")),
+            lapply(names(cfg$fieldwork$by_questionnaire), function(q) { z <- cfg$fieldwork$by_questionnaire[[q]]
+              tags$tr(tags$td(q), tags$td(fmt_d(z$first)), tags$td(fmt_d(z$last)), tags$td(format(z$interviews, big.mark = ","))) }))))
   })
   set_period <- function(n = NULL) {
     fw <- rv$cfg$fieldwork; if (is.null(fw)) { showNotification("No interview dates found in the household questionnaire.", type = "warning"); return() }
@@ -857,19 +959,18 @@ ipm_server <- function(input, output, session) {
       e <- list(dataset = ds_k); for (f in flds) e[[f]] <- nz(g(paste0("ex_", k, "_", f), cfg$extras[[k]][[f]]))
       cfg$extras[[k]] <- e
     }
-    for (k in c("levelsig", "test_min", "max_uniq", "highly_flag", "woi_anchor", "test_min_nonmissing", "stata_compat", "period_weeks_only")) cfg$options[[k]] <- g(paste0("o_", k), cfg$options[[k]])
+    a <- adv_read(input); for (k in names(a)) cfg$options[[k]] <- a[[k]]
     cfg
   }
   output$cfg_download <- downloadHandler(filename = function() "ipm_settings.yml", content = function(f) {
     cfg <- collect_cfg(); cfg$data_dir <- NULL; cfg$results_dir <- NULL; write_config(cfg, f) })
 
-  observeEvent(input$check, {
-    cfg <- collect_cfg(); iss <- validate_config(cfg, rv$light)
-    output$issues <- renderTable(if (nrow(iss)) iss else data.frame(result = "No problems found. You can continue."))
-  })
-
-  output$team_tbl <- renderTable({
-    input$team_preview; cfg <- isolate(collect_cfg())
+  # ---------- teams from the data (for the table and the status) ----------
+  team_key <- reactive({ cfg <- cur_cfg(); req(cfg)
+    list(teams = cfg$teams, dir = cfg$data_dir, iv = lapply(cfg$datasets, function(d) c(d$file, d$interviewer, d$supervisor))) })
+  team_key_d <- debounce(team_key, 800)
+  team_assign <- reactive({
+    team_key_d(); cfg <- isolate(cur_cfg()); req(cfg)
     rows <- list()
     for (n in names(cfg$datasets)) { d <- cfg$datasets[[n]]; if (is.null(d$interviewer)) next
       cols <- unique(c(d$interviewer, cfg$teams$variable, d$supervisor))
@@ -877,10 +978,15 @@ ipm_server <- function(input, output, session) {
       iv <- as.numeric(x[[d$interviewer]]); sup <- if (!is.null(cfg$teams$variable) && cfg$teams$variable %in% names(x)) as.numeric(x[[cfg$teams$variable]]) else NULL
       code <- if (!is.null(d$supervisor) && d$supervisor %in% names(x)) suppressWarnings(as.numeric(x[[d$supervisor]])) else NA_real_
       rows[[n]] <- data.table(interv = iv, sup = if (is.null(sup)) NA_real_ else sup, code = code) }
-    req(length(rows) > 0); a <- rbindlist(rows)[!is.na(interv)]
+    if (!length(rows)) return(NULL)
+    a <- rbindlist(rows)[!is.na(interv)]
     lv <- if (!is.null(cfg$teams$variable)) sort(unique(a$sup)) else NULL
-    a[, team := .int$assign_teams(interv, if (is.null(lv)) NULL else sup, cfg, lv)]
+    a[, team := tryCatch(.int$assign_teams(interv, if (is.null(lv)) NULL else sup, cfg, lv), error = function(e) NA_integer_)]
     if (!is.null(lv)) a[, code := sup]
+    a
+  })
+  output$team_tbl <- renderTable({
+    a <- team_assign(); req(a)
     codes <- a[!is.na(team) & !is.na(code), .N, by = .(team, code)][order(team, -N)][, .(code = paste(fmt_i(code), collapse = ", ")), by = team]
     a <- unique(a[, .(interv, team)])
     out <- a[order(team, interv), .(interviewers = paste(sort(unique(interv)), collapse = ", "), n = uniqueN(interv)), by = team]
@@ -889,6 +995,120 @@ ipm_server <- function(input, output, session) {
     out[is.na(`supervisor / team leader code`), `supervisor / team leader code` := ""]
     out
   })
+
+  # ---------- status of each part of the setup (review cards, step bar, run summary) ----------
+  status_cfg <- debounce(cur_cfg, 700)
+  DS_FIELDS <- "^(interviewer|result|day|start_hour|end_hour|supervisor|file|parent|keys|linked|no interviewer|no day)"
+  setup_status <- reactive({
+    cfg <- status_cfg(); req(cfg, rv$light)
+    iss <- tryCatch(validate_config(cfg, rv$light), error = function(e) data.frame(level = "error", where = "load", message = conditionMessage(e)))
+    part <- ifelse(iss$where == "teams", "teams", ifelse(iss$where %in% c("main", "load"), "period", ifelse(iss$where == "extras", "outputs",
+            ifelse(grepl("^(module matches|unit variable)", iss$message), "flags", ifelse(grepl(DS_FIELDS, iss$message), "datasets", "outputs")))))
+    iss$message <- ifelse(iss$where %in% c("main", "teams", "extras", "load", "datasets"), iss$message, paste0(iss$where, ": ", iss$message))
+    mk <- function(p, text, extra = character(), extra_lvl = "warning") {
+      m <- iss[part == p, , drop = FALSE]
+      lv <- c(m$level, rep(extra_lvl, length(extra)))
+      list(status = if (any(lv == "error")) "err" else if (length(lv)) "warn" else "ok", text = text, issues = c(m$message, extra))
+    }
+    fw <- cfg$fieldwork; st <- suppressWarnings(as.Date(cfg$period$start)); n <- cfg$period$days %||% NA
+    per_x <- character(); per_txt <- "no period set"
+    if (length(st) && !is.na(st) && !is.na(n)) { per_txt <- sprintf("%s days from %s", n, fmt_d(st))
+      if (!is.null(fw) && st > as.Date(fw$last)) per_x <- "The period starts after the last interview: no data to analyse."
+      else if (!is.null(fw) && st + n < as.Date(fw$first)) per_x <- "The period ends before the first interview: no data to analyse." }
+    nm <- trimws(input$survey_name %||% "")
+    name_x <- if (!nzchar(nm)) "No survey name: the briefing, reports and run history will say 'MICS survey'." else character()
+    nout <- sum(unlist(cfg$outputs))
+    a <- tryCatch(team_assign(), error = function(e) NULL)
+    nt <- if (!is.null(a)) uniqueN(a$team[!is.na(a$team)]) else length(cfg$teams$ranges %||% character())
+    na_iv <- if (!is.null(a)) uniqueN(a$interv[is.na(a$team)]) else 0L
+    tm_txt <- sprintf("%d teams%s", nt, if (!is.null(a)) sprintf(", %d interviewers", uniqueN(a$interv[!is.na(a$team)])) else "")
+    fc <- tryCatch(ipm_flag_check(cfg, rv$light$meta), error = function(e) NULL)
+    nmod <- sum(lengths(lapply(cfg$datasets, `[[`, "flag_modules"))); nign <- sum(lengths(lapply(cfg$datasets, `[[`, "flag_ignore")))
+    nq <- sum(vapply(cfg$datasets, function(d) !is.null(d$result), logical(1))); nl <- sum(vapply(cfg$datasets, function(d) !is.null(d$parent), logical(1)))
+    list(period = c(mk("period", per_txt, c(per_x, name_x), if (length(per_x)) "error" else "warning"), list(period_ok = !length(per_x) && !any(part == "period"), named = nzchar(nm))),
+         outputs = mk("outputs", sprintf("%d of %d outputs", nout, length(cfg$outputs))),
+         datasets = mk("datasets", sprintf("%d questionnaires, %d linked files", nq, nl)),
+         teams = mk("teams", tm_txt, if (na_iv) sprintf("%d interviewer(s) not in any team: they are left out of the analysis.", na_iv)),
+         flags = mk("flags", sprintf("%d modules, %d variables ignored", nmod, nign), if (!is.null(fc)) fc$problems else character()))
+  })
+  chip <- function(s) span(span(class = paste("su-chip", s$status), c(ok = "OK", warn = "Check", err = "Fix")[[s$status]]), span(class = "su-sum", s$text))
+  for (k in c("period", "outputs", "datasets", "teams", "flags")) local({ key <- k
+    output[[paste0("st_", key)]] <- renderUI({ s <- setup_status()[[key]]; chip(s) }) })
+  for (k in c("period", "outputs", "datasets", "teams", "flags")) local({ key <- k
+    output[[paste0("iss_", key)]] <- renderUI({ s <- setup_status()[[key]]; if (!length(s$issues)) return(NULL)
+      div(class = "aiwarn", tags$ul(style = "margin:0; padding-left:18px", lapply(s$issues, tags$li))) }) })
+  warn_parts <- function(st) { lab <- c(period = "Survey and period", outputs = "Outputs", datasets = "Datasets", teams = "Teams", flags = "Questions tested")
+    w <- names(Filter(function(z) z$status != "ok", st)); stats::setNames(unname(lab[w]), w) }
+
+  output$stepper <- renderUI({
+    s <- cur_step(); has <- !is.null(rv$cfg)
+    st <- if (has) tryCatch(setup_status(), error = function(e) NULL) else NULL
+    rev_ok <- !is.null(st) && !length(warn_parts(st))
+    one <- function(id, n, lab, ok) { off <- !has && id != "s_data"
+      div(class = paste("su-step", if (s == id) "on", if (ok && s != id) "ok", if (off) "off"),
+          onclick = if (!off) sprintf("Shiny.setInputValue('go_step', '%s', {priority: 'event'})", id),
+          span(class = "n", if (ok && s != id) icon("check") else n), lab) }
+    div(class = "su-steps", one("s_data", 1, "Data", has), div(class = "su-sep"), one("s_review", 2, "Review", rev_ok), div(class = "su-sep"),
+        one("s_run", 3, "Run", !is.null(rv$res)))
+  })
+  output$su_bar <- renderUI({
+    s <- cur_step()
+    msg <- if (is.null(rv$cfg)) span(icon("cloud-arrow-up"), " Load the data to start.") else {
+      st <- tryCatch(setup_status(), error = function(e) NULL); w <- if (is.null(st)) character() else warn_parts(st)
+      if (is.null(st)) span(icon("spinner", class = "fa-spin"), " Checking the settings...")
+      else if (!length(w)) span(icon("circle-check", class = "su-ok"), " Ready to run: nothing needs a look.")
+      else span(icon("triangle-exclamation", class = "su-wn"), sprintf(" %d part%s to check: ", length(w), if (length(w) > 1) "s" else ""),
+                lapply(seq_along(w), function(i) tagList(if (i > 1) ", ", tags$a(href = "#", onclick = sprintf("Shiny.setInputValue('go_part', '%s', {priority: 'event'}); return false;", names(w)[i]), w[[i]])))) }
+    div(class = "su-bar", div(class = "in", div(class = "msg", msg),
+      if (!is.null(rv$cfg)) div(class = "btns",
+        if (s != "s_data") actionButton("su_back", tagList(icon("arrow-left"), " Back"), class = "btn-outline-secondary"),
+        if (s != "s_run") actionButton("su_next", tagList(if (s == "s_data") "Review the settings " else "Continue ", icon("arrow-right")), class = "btn-outline-primary"),
+        actionButton("su_run", tagList(icon("play"), " Run"), class = "btn-primary"))))
+  })
+  observeEvent(input$go_part, { go_step("s_review"); accordion_panel_open("rev", input$go_part); session$sendCustomMessage("su_scroll", input$go_part) })
+
+  output$run_summary <- renderUI({
+    cfg <- cur_cfg(); req(cfg); st <- tryCatch(setup_status(), error = function(e) NULL); req(st)
+    chg <- adv_chg(); pr <- input$preset %||% "standard"
+    row <- function(lab, txt, s = NULL) tags$li(if (is.null(s) || s$status == "ok") icon("circle-check", class = "su-ok") else icon("triangle-exclamation", class = if (s$status == "err") "su-er" else "su-wn"),
+                                          tags$b(lab, ": "), txt, if (!is.null(s) && length(s$issues)) div(class = "small-note", style = "margin-left:22px", paste(s$issues, collapse = " ")))
+    tags$ul(class = "su-list",
+      row("Survey", if (nzchar(trimws(input$survey_name %||% ""))) input$survey_name else "(no name: 'MICS survey')"),
+      row("Period of analysis", st$period$text, st$period), row("Outputs", st$outputs$text, st$outputs), row("Datasets", st$datasets$text, st$datasets),
+      row("Teams", st$teams$text, st$teams), row("Questions tested", st$flags$text, st$flags),
+      row("Analysis settings", if (!nrow(chg)) "standard" else sprintf("%s - %d changed from the defaults (%s)", if (pr == "custom") "custom" else ipm_presets()[[pr]]$label, nrow(chg), paste(chg$setting, collapse = "; "))))
+  })
+  output$saved_note <- renderUI({
+    nm <- trimws(input$survey_name %||% "")
+    tags$p(class = "small-note", if (!.int$history_on()) "Settings are not remembered on this server (run history turned off)."
+           else if (!nzchar(nm)) "Give the survey a name: its settings are then remembered when you run, for the next data export."
+           else sprintf("The settings are remembered for '%s' when you run: with the next data export, type the same name and choose 'Use them'.", nm))
+  })
+
+  # ---------- advanced analysis: presets, changed settings ----------
+  cur_opts <- reactive(adv_read(input))
+  observeEvent(input$preset, { p <- input$preset; if (identical(p, "custom")) return()
+    if (identical(.int$match_preset(cur_opts()), p)) return()
+    set_adv(.int$preset_values(p)) }, ignoreInit = TRUE)
+  observe({
+    o <- cur_opts(); req(length(o) == length(PSPEC))
+    m <- .int$match_preset(o) %|na|% "custom"; pend <- isolate(adv_pending())
+    if (!is.null(pend) && difftime(Sys.time(), pend$t, units = "secs") < 3) { if (identical(m, pend$p)) adv_pending(NULL); return() }
+    adv_pending(NULL)
+    if (!identical(isolate(input$preset), m)) updateRadioButtons(session, "preset", selected = m)
+  })
+  adv_chg <- reactive(ipm_settings_changed(list(options = cur_opts())))
+  output$preset_help <- renderUI({ p <- input$preset %||% "standard"
+    tags$p(class = "small-note", if (p == "custom") "Your own settings: see below what differs from the defaults." else ipm_presets()[[p]]$help) })
+  output$adv_changed <- renderUI({ x <- adv_chg(); if (!nrow(x)) return(tags$p(class = "small-note", icon("circle-check", class = "su-ok"), " All settings are the defaults."))
+    div(class = "su-chg", tags$b(sprintf("%d setting%s changed from the defaults", nrow(x), if (nrow(x) > 1) "s" else "")),
+        tags$ul(style = "margin:4px 0; padding-left:18px", lapply(seq_len(nrow(x)), function(i) tags$li(sprintf("%s: %s (default %s)", x$setting[i], x$value[i], x$default[i]),
+          tags$a(href = "#", class = "r", onclick = sprintf("Shiny.setInputValue('adv_reset', '%s', {priority: 'event'}); return false;", x$option[i]), "reset")))),
+        actionLink("adv_reset_all", "Reset all to the defaults"))
+  })
+  output$adv_badge <- renderUI({ n <- nrow(adv_chg()); if (n) span(class = "badge rounded-pill bg-warning text-dark", n) })
+  observeEvent(input$adv_reset, { o <- cur_opts(); o[[input$adv_reset]] <- ipm_defaults()[[input$adv_reset]]; set_adv(o) })
+  observeEvent(input$adv_reset_all, set_adv(list()))
 
   # ---------- run ----------
   observeEvent(input$run, do_run())
@@ -901,6 +1121,7 @@ ipm_server <- function(input, output, session) {
         if (inherits(r, "error")) { m <- job_error(r); logm("ERROR:", m); showNotification(m, type = "error", duration = NULL); return() }
         if (is.character(r$sc)) { logm("Scorecard:", r$sc); r$sc <- NULL }
         rv$cmp <- if (!is.null(r$sc)) tryCatch(ipm_history_update(r$res, r$sc), error = function(e) { logm("Run history:", conditionMessage(e)); NULL })
+        tryCatch(ipm_settings_save(cfg), error = function(e) logm("Settings not remembered:", conditionMessage(e)))
         rv$sc <- r$sc; rv$res <- r$res; logm("Done."); nav_to(if (!is.null(r$sc)) "briefing" else "results")
       })
   }
@@ -1290,7 +1511,7 @@ ipm_server <- function(input, output, session) {
   ai_box <- function(prefix, title, sugg) {
     st <- tryCatch(ai_st(), error = function(e) NULL)
     div(class = "bf-card aibox", tags$h4(icon("wand-magic-sparkles"), " ", title),
-      if (!isTRUE(st$ready)) div(class = "hint", "No AI model is set up: choose a connection under 7. Results > Action plan (AI). The answers use the same aggregated figures as this page, never the records.")
+      if (!isTRUE(st$ready)) div(class = "hint", "No AI model is set up: choose a connection under Results > Action plan (AI). The answers use the same aggregated figures as this page, never the records.")
       else div(class = "hint", sprintf("Answered by %s from the aggregated figures of this run (no records are sent).", st$model)),
       div(class = "sugg", lapply(sugg, function(x) tags$button(class = "btn btn-sm btn-outline-secondary",
                                                                onclick = sprintf("Shiny.setInputValue('%s_sugg', %s, {priority: 'event'})", prefix, encodeString(x, quote = "'")), x))),
@@ -1305,7 +1526,7 @@ ipm_server <- function(input, output, session) {
   ai_page_ask <- function(prefix, q) {
     q <- trimws(q %||% ""); if (!nzchar(q)) return()
     st <- ai_st()
-    if (!isTRUE(st$ready)) { showNotification("No AI model is set up: choose a connection under 7. Results > Action plan (AI).", type = "warning", duration = 8); return() }
+    if (!isTRUE(st$ready)) { showNotification("No AI model is set up: choose a connection under Results > Action plan (AI).", type = "warning", duration = 8); return() }
     if (job_running("ai_ask")) { showNotification("The AI is already answering a question.", type = "warning"); return() }
     cx <- ai_ctx(prefix)
     start_job("ai_ask", "ask", list(q = paste0(cx$lead, q), res = rv$res, sc = rv$sc, st = st, history = Filter(function(x) identical(x$ctx, cx$key), rv$chat),
@@ -1328,7 +1549,7 @@ ipm_server <- function(input, output, session) {
   # ---------- AI reading of one table or graph (only its figures are sent) ----------
   ai_read <- function(key, title, x, how = NULL) {
     st <- ai_st()
-    if (!isTRUE(st$ready)) { showNotification("No AI model is set up: choose a connection under 7. Results > Action plan (AI).", type = "warning", duration = 8); return() }
+    if (!isTRUE(st$ready)) { showNotification("No AI model is set up: choose a connection under Results > Action plan (AI).", type = "warning", duration = 8); return() }
     if (job_running("ai_read")) { showNotification("The AI is already reading a table or graph.", type = "warning"); return() }
     start_job("ai_read", "read", list(title = title, x = x, how = how, st = st, language = input$ai_lang %||% "English"),
       sprintf("%s is reading '%s'", st$model, substr(title, 1, 60)), if (st$provider == "ollama") "local models: up to a few minutes" else NULL,
@@ -1469,7 +1690,7 @@ ipm_server <- function(input, output, session) {
         div(class = "small-note", "Local models: use 14B parameters or more for usable plans; smaller models give generic or wrong plans (the automatic checks below each plan will show it)."))
   })
   observeEvent(input$ai_preview, {
-    if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
+    if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (Setup > Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st(); q <- trimws(input$ai_q %||% "")
     cmp <- isTRUE(input$ai_compact)
     rv$prev <- list(plan = ipm_ai_preview(rv$res, rv$sc, st, "plan", language = input$ai_lang, compact = cmp),
@@ -1515,7 +1736,7 @@ ipm_server <- function(input, output, session) {
   output$ai_model_hint <- renderUI({ st <- ai_st(); a <- model_advice(st); if (nzchar(a)) div(class = "small-note", style = "margin-top:-6px; margin-bottom:8px", a) })
   plan_scope <- function(x) switch(x %||% "hm", h = "High", hm = c("High", "Medium"), all = NULL)
   observeEvent(input$ai_go, {
-    if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
+    if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (Setup > Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st()
     if (!isTRUE(st$ready)) { showNotification("No AI model ready: choose a connection and a model, or use the rule-based plan.", type = "warning"); return() }
     n <- table(factor(rv$sc$teams$priority, levels = c("High", "Medium", "Low")))
@@ -1549,7 +1770,7 @@ ipm_server <- function(input, output, session) {
         if (inherits(p, "error")) { showNotification(job_error(p), type = "error", duration = NULL); return() }
         rv$plan <- p; r <- rv$res; r$action_plan <- p; rv$res <- r })
   })
-  observeEvent(input$rules_go, { if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }; rv$plan <- ipm_plan_rules(rv$sc); r <- rv$res; r$action_plan <- NULL; rv$res <- r })
+  observeEvent(input$rules_go, { if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (Setup > Run): the AI works from its results.", type = "warning", duration = 8); return() }; rv$plan <- ipm_plan_rules(rv$sc); r <- rv$res; r$action_plan <- NULL; rv$res <- r })
   output$plan_ui <- renderUI({
     p <- rv$plan; req(p)
     li <- function(x) tags$ul(lapply(x, tags$li))
@@ -1586,7 +1807,7 @@ ipm_server <- function(input, output, session) {
       ipm_plan_docx(p, f, rv$sc, rv$res$cfg$survey_name, rv$sc$survey$period) })
   observeEvent(input$ai_ask, {
     q <- trimws(input$ai_q %||% ""); if (!nzchar(q)) return()
-    if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (tab 6. Run): the AI works from its results.", type = "warning", duration = 8); return() }
+    if (is.null(rv$res) || is.null(rv$sc)) { showNotification("Run the analysis first (Setup > Run): the AI works from its results.", type = "warning", duration = 8); return() }
     st <- ai_st()
     if (!isTRUE(st$ready)) { showNotification("No AI model configured.", type = "warning"); return() }
     start_job("ai_ask", "ask", list(q = q, res = rv$res, sc = rv$sc, st = st, history = rv$chat, language = input$ai_lang, compact = isTRUE(input$ai_compact)),

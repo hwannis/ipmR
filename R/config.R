@@ -32,7 +32,19 @@ ipm_defaults <- function() {
     period_weeks_only    = FALSE,     # TRUE: descriptive charts (outputs 2-8) show only the weeks of the period of analysis
     stata_compat         = FALSE,     # TRUE: reproduce the Stata IPM numbers - period of start + days (one day more), records up to
                                       #   6 days before week 1 counted in week 1 (truncation), min. obs on records (overrides test_min_nonmissing)
-    workers              = "auto"     # processes drawing graphs and writing flag tables: "auto" (cores - 1, 1 per 0.6 GB of free memory, max 6) or a number; 1 = none
+    workers              = "auto",    # processes drawing graphs and writing flag tables: "auto" (cores - 1, 1 per 0.6 GB of free memory, max 6) or a number; 1 = none
+    # --- issue rules (ipm_scorecard): which differences become issues, and the team priority ---
+    recent_weeks      = 3,     # descriptive issues (interview length, completion, 'don't know'...) use the last n weeks
+    rule_sw_share     = 0.5,   # questionnaire problem: question flagged in at least this share of the teams ...
+    rule_sw_min_teams = 3,     # ... and in at least this many teams
+    rule_p            = 0.01,  # an excess of flags (team, team module, interviewer) must have binomial p below this
+    rule_team_ratio   = 1.5,   # whole-team excess: team flag rate at least this many times the survey rate ...
+    rule_team_high    = 2.5,   # ... high severity from this many times
+    rule_module_ratio = 3,     # team module: rate at least this many times the module's rate in the other teams
+    rule_interv_ratio = 2,     # interviewer excess: at least this many times the survey rate ...
+    rule_interv_high  = 4,     # ... high severity from this many times
+    rule_prio_high    = 2,     # High priority: a whole-team excess, or at least this many high-severity issues
+    rule_prio_medium  = 3      # Medium priority: 1 high-severity issue, or at least this many issues
   )
 }
 

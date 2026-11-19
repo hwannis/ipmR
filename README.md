@@ -136,13 +136,14 @@ The release asset `ipm_shinyapp.zip` (built from `inst/shinyapps/` by `deploy/sh
 
 **The pages:**
 
-1. **Data.** Select the folder with the `.sav` files (or the files, or a `.zip`). Everything is then recognised automatically.
-2. **Settings & outputs.** Survey name, period of analysis, outputs to produce, and the variables for the household members, birth history and anthropometry outputs.
-3. **Datasets.** Check the variables mapped for each file.
-4. **Teams.** Check which interviewers are in which team.
-5. **Flag settings.** Modules to test (including the initial module of each questionnaire) and variables to ignore, picked from the list of variables; **Check flag settings** lists every variable with its label and status, as in the Stata application.
-6. **Run.** Runs everything. You can also save or load the settings file.
-7. **Results:**
+**Setup** is one page in three steps:
+1. **Data.** Drop the folder with the `.sav` files (or the files, or a `.zip`) and type the survey name. Everything is recognised automatically, and a checklist shows what was found. If the survey was run before on the same computer or server, **Use them** takes the settings of its last run.
+2. **Review.** One part each for survey and period, outputs, datasets, teams and questions tested. Each part shows a summary and a status (OK, Check or Fix); only the parts that need a look are open.
+3. **Run.** A summary of what will run, then Run. You can also save or load the settings file.
+
+**Advanced analysis** (button at the top of Setup) holds the parameters of the flag tests, the issue rules (how many weeks, from how many times the survey rate a team or interviewer excess is an issue, the priority rules) and output details. Presets: Standard (recommended), Early fieldwork, Strict and Stata-compatible. Each setting shows its help; settings changed from the defaults are listed there, in the run summary and in the Word report.
+
+**Results:**
    - **Summary & priorities:** automatic narrative covering overall flag level, most problematic modules and questions, teams to target and on which modules, interviewers to observe with examples, and other warning signs. It also shows the team × module heatmap and the flag rates by team and by interviewer.
    - **Figures:** all graphs, each with a "How to read" note, one at a time or all the graphs of an output on one page; SVG and high-resolution PNG downloads; on the graphs of flags by module, point at a circle to see its flag table.
    - **Flag explorer:** every flagged test with a one-line reading, for example "Interviewer 102 recorded '1. YES' for 91% of cases (31/34) vs 7% for the rest of team T1 (4/59)". Click a row to see the full crosstab.

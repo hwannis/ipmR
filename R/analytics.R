@@ -86,13 +86,14 @@ fl_concerns <- function(d) {
 #'   birth history, FL assessment) - one issue per interviewer and area, with the evidence of each check.
 #' Questions flagged in most teams are left out of the team and interviewer flag comparisons: they are counted
 #' once, as questionnaire problems. Team priority: High = the team as a whole has an excess of flags or 2+
-#' high-severity issues; Medium = 1 high-severity issue or 3+ issues; Low = otherwise.
+#' high-severity issues; Medium = 1 high-severity issue or 3+ issues; Low = otherwise. The thresholds are the
+#' `recent_weeks` and `rule_*` options of the settings (see [ipm_defaults()] and [ipm_presets()]).
 #' @param res result of run_ipm()
-#' @param recent_weeks number of most recent weeks used for the descriptive signals
+#' @param recent_weeks number of most recent weeks used for the descriptive signals (default: the `recent_weeks` option, 3)
 #' @return list(survey, teams, interviewers, modules, questions, team_modules, signals, descriptive)
 #' @export
-ipm_scorecard <- function(res, recent_weeks = 3) {
-  o <- res$cfg$options; ti <- as.data.table(res$team_info %||% res$prepared$team_info)
+ipm_scorecard <- function(res, recent_weeks = NULL) {
+  o <- utils::modifyList(ipm_defaults(), res$cfg$options %||% list()); ti <- as.data.table(res$team_info %||% res$prepared$team_info)
   tl <- function(t) { l <- ti$team_label[match(t, ti$team)]; ifelse(is.na(l), paste0("T", t), l) }
   lib <- ipm_action_library()
   sig <- list()
@@ -100,6 +101,8 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
                       severity, value = NA_real_, benchmark = NA_real_, evidence, action = NA_character_, owner = NA_character_, timing = NA_character_, area = type)
     sig[[length(sig) + 1L]] <<- data.table(level, type, area, team = as.integer(team), interv = as.numeric(interv), dataset, module, question,
                                            severity, value = as.numeric(value), benchmark = as.numeric(benchmark), evidence, action, owner, timing)
+  recent_weeks <- as.integer(recent_weeks %||% o$recent_weeks)
+  sw_share <- o$rule_sw_share; sw_min <- o$rule_sw_min_teams; P <- o$rule_p
   la <- function(key, ...) { a <- lib[[key]]; list(action = if (...length()) sprintf(a$action, ...) else a$action, owner = a$owner, timing = a$timing) }
 
   fa <- res$outputs$flaganal
@@ -114,7 +117,7 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
     R <- mean(t$flag)
     qs <- t[, .(description = vardesc[1], tests = .N, flags = sum(flag), teams = uniqueN(team), teams_flagged = uniqueN(team[flag == 1]),
                 interviewers_flagged = uniqueN(interv[flag == 1])), by = .(dataset, module = mod, question = varname)]
-    qs[, `:=`(rate = flags / tests * 100, survey_wide = teams_flagged >= 3 & teams_flagged / teams >= 0.5)]
+    qs[, `:=`(rate = flags / tests * 100, survey_wide = teams_flagged >= sw_min & teams_flagged / teams >= sw_share)]
     setorder(qs, -flags, -rate)
     # questions flagged in most teams are a questionnaire problem: left out of the team and interviewer comparisons
     t[, sw := paste(dataset, varname) %in% qs[survey_wide == TRUE, paste(dataset, question)]]
@@ -148,7 +151,7 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
     ms <- t[, .(tests = .N, flags = sum(flag), teams = uniqueN(team), teams_flagged = uniqueN(team[flag == 1]),
                 interviewers_flagged = uniqueN(interv[flag == 1]), questions_survey_wide = uniqueN(varname[sw])), by = .(dataset, module = mod)]
     ms[, `:=`(rate = flags / tests * 100, ratio = (flags / tests) / R)]
-    ms[, scope := fifelse(teams_flagged >= 3 & teams_flagged / teams >= 0.5, "survey-wide", "concentrated")]
+    ms[, scope := fifelse(teams_flagged >= sw_min & teams_flagged / teams >= sw_share, "survey-wide", "concentrated")]
     setorder(ms, -rate)
 
     tm <- tx[, .(tests = .N, flags = sum(flag), interviewers_flagged = paste(sort(unique(interv[flag == 1])), collapse = ", ")), by = .(team, dataset, module = mod)]
@@ -175,23 +178,23 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
               action = a$action, owner = a$owner, timing = a$timing, area = "questionnaire") }
 
     # --- team and interviewer flags (questions flagged in most teams left out)
-    for (i in which(teams$flags_x >= 5 & teams$ratio_excl >= 1.5 & teams$p_excl < 0.01)) { h <- teams[i]
+    for (i in which(teams$flags_x >= 5 & teams$ratio_excl >= o$rule_team_ratio & teams$p_excl < P)) { h <- teams[i]
       a <- la("team_flags")
-      add_sig("team", "team_flags", h$team, severity = if (h$ratio_excl >= 2.5) "high" else "medium", value = h$rate_excl, benchmark = Rx * 100,
+      add_sig("team", "team_flags", h$team, severity = if (h$ratio_excl >= o$rule_team_high) "high" else "medium", value = h$rate_excl, benchmark = Rx * 100,
               evidence = sprintf("Whole team: %s of tests flagged (%d of %d) vs %s in the survey, %.1f times the survey rate (questions flagged in most teams left out).",
                                  pctf(h$rate_excl), h$flags_x, h$tests_x, pctf(Rx * 100), h$ratio_excl),
               action = a$action, owner = a$owner, timing = a$timing, area = "flags") }
-    for (i in which(tm$flags >= 4 & tm$rate >= 3 * tm$module_rate & tm$rate >= 2 * Rx * 100 & tm$p_excess < 0.01)) { h <- tm[i]
+    for (i in which(tm$flags >= 4 & tm$rate >= o$rule_module_ratio * tm$module_rate & tm$rate >= 2 * Rx * 100 & tm$p_excess < P)) { h <- tm[i]
       a <- la("team_module", paste(h$dataset, h$module))
       add_sig("team", "team_module", h$team, dataset = h$dataset, module = h$module,
-              severity = if (h$flags >= 6 && h$rate >= 4 * h$module_rate) "high" else "medium", value = h$rate, benchmark = h$module_rate,
+              severity = if (h$flags >= 6 && h$rate >= (o$rule_module_ratio + 1) * h$module_rate) "high" else "medium", value = h$rate, benchmark = h$module_rate,
               evidence = sprintf("Module %s %s: %s of the team's tests flagged (%d of %d) vs %s in the other teams; flagged interviewer(s): %s.",
                                  h$dataset, h$module, pctf(h$rate), h$flags, h$tests, pctf(h$module_rate), h$interviewers_flagged),
               action = a$action, owner = a$owner, timing = a$timing, area = paste("module", h$dataset, h$module)) }
-    for (i in which(iv$flags_x >= 5 & iv$ratio_excl >= 2 & iv$p_excl < 0.01)) { h <- iv[i]
+    for (i in which(iv$flags_x >= 5 & iv$ratio_excl >= o$rule_interv_ratio & iv$p_excl < P)) { h <- iv[i]
       top <- tx[interv == h$interv & flag == 1, .N, by = .(dataset, mod)][order(-N)][seq_len(min(.N, 3))]
       a <- la("interviewer_flags", fmt_int(h$interv))
-      add_sig("interviewer", "interviewer_flags", h$team, h$interv, severity = if (h$ratio_excl >= 4) "high" else "medium", value = h$rate_excl, benchmark = Rx * 100,
+      add_sig("interviewer", "interviewer_flags", h$team, h$interv, severity = if (h$ratio_excl >= o$rule_interv_high) "high" else "medium", value = h$rate_excl, benchmark = Rx * 100,
               evidence = sprintf("%s of questions flagged (%d of %d) vs %s in the survey and %s for the team; main modules: %s.",
                                  pctf(h$rate_excl), h$flags_x, h$tests_x, pctf(Rx * 100), pctf(teams$rate_excl[match(h$team, teams$team)]),
                                  paste(sprintf("%s %s (%d)", top$dataset, top$mod, top$N), collapse = ", ")),
@@ -334,7 +337,7 @@ ipm_scorecard <- function(res, recent_weeks = 3) {
                                                      team_flags = any(type == "team_flags")), by = team]
   teams <- merge(teams, pts, by = "team", all.x = TRUE)
   teams[is.na(points), `:=`(points = 0, signals = 0L, high = 0L, team_flags = FALSE)]
-  teams[, priority := fifelse(team_flags | high >= 2, "High", fifelse(high >= 1 | signals >= 3, "Medium", "Low"))]
+  teams[, priority := fifelse(team_flags | high >= o$rule_prio_high, "High", fifelse(high >= 1 | signals >= o$rule_prio_medium, "Medium", "Low"))]
   teams[, c("high", "team_flags") := NULL]
   teams[, team_label := tl(team)]
   # without a flag analysis the flag columns are missing: add them empty so that tables and plans work on the descriptive signals alone

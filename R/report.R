@@ -93,6 +93,10 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
     if (all(is.finite(fd))) doc <- add_text(doc, sprintf("Fieldwork covered by the data: %s to %s (%d days).", format(fd[1], "%d %b %Y"), format(fd[2], "%d %b %Y"), as.integer(diff(fd)) + 1L), 9)
   }
   if (!is.null(cfg$period$start)) doc <- add_text(doc, sprintf("Period of analysis for anthropometry case listing and flag analysis: %s", period_bounds(cfg)$label), 9)
+  chg <- tryCatch(ipm_settings_changed(cfg), error = function(e) NULL)
+  if (!is.null(chg) && nrow(chg))
+    doc <- add_text(doc, paste0("Settings changed from the defaults (the numbers differ from a standard run): ",
+                                paste(sprintf("%s %s (default %s)", chg$setting, chg$value, chg$default), collapse = "; "), "."), 9)
   # key findings
   progress("Writing report: key findings")
   sc <- tryCatch(ipm_scorecard(res), error = function(e) NULL)                 # the one rule engine: summary, tables and plan all read it
@@ -122,7 +126,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
     if (!is.null(sc) && nrow(sc$teams)) {
       doc <- officer::body_add_break(doc)
       doc <- add_heading(doc, "Team scorecard and priorities", 11)
-      doc <- add_text(doc, "Priority: High = the team as a whole has an excess of flags, or 2 or more high-severity issues; Medium = 1 high-severity issue or 3 or more issues; Low = otherwise. Questionnaire problems (questions flagged in most teams) do not count against teams, and are left out of % flagged and x survey rate. Points: high = 3, medium = 1. Details in team_action_plan.docx and data/scorecard_*.csv.", 8, TRUE)
+      doc <- add_text(doc, paste0("Priority: ", rule_text(res$cfg$options), ". Questionnaire problems (questions flagged in most teams) do not count against teams, and are left out of % flagged and x survey rate. Points: high = 3, medium = 1. Details in team_action_plan.docx and data/scorecard_*.csv."), 8, TRUE)
       tb <- sc$teams[, .(Team = team_label, Priority = priority, Points = points, Signals = signals, `% flagged` = round(rate, 1), `x survey rate` = round(ratio, 1),
                          `Modules` = top_modules, `Interviewers of concern` = interviewers_of_concern)]
       tb[is.na(tb)] <- ""
@@ -204,7 +208,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.8.0.9002"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
+IPMR_VERSION <- "0.8.0.9003"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
 utils_pkgver <- function() IPMR_VERSION
 
 report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL, drawn = NULL, later = NULL) {

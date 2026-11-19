@@ -4,12 +4,12 @@
 \alias{ipm_scorecard}
 \title{Team and interviewer scorecard}
 \usage{
-ipm_scorecard(res, recent_weeks = 3)
+ipm_scorecard(res, recent_weeks = NULL)
 }
 \arguments{
 \item{res}{result of run_ipm()}
 
-\item{recent_weeks}{number of most recent weeks used for the descriptive signals}
+\item{recent_weeks}{number of most recent weeks used for the descriptive signals (default: the \code{recent_weeks} option of the settings, 3)}
 }
 \value{
 list(survey, teams, interviewers, modules, questions, team_modules, signals)
@@ -18,5 +18,6 @@ list(survey, teams, interviewers, modules, questions, team_modules, signals)
 Computes, from an IPM result, one row per team and per interviewer with the flag-analysis indicators
 (flags vs. the number expected at the survey rate, binomial screening p-value) and the descriptive
 warning signs of the most recent weeks, a long table of signals, and a priority level per team.
-This is the evidence base used by the rule-based and AI recommendations.
+This is the evidence base used by the rule-based and AI recommendations. The thresholds of the issue rules
+and of the team priority are the \code{recent_weeks} and \code{rule_*} options of the settings (see \code{\link{ipm_defaults}} and \code{\link{ipm_presets}}).
 }
