@@ -92,3 +92,25 @@ test_that("a single individual questionnaire without the household file is auto-
   expect_equal(cfg$fieldwork$source, "fs.sav")
   expect_false(is.null(cfg$period$start))
 })
+
+test_that("the report can be built with chosen sections and files only (#81)", {
+  dir <- add_synth_fs(make_synth())
+  cfg <- mics7_autoconfig(dir, "Synthetic")
+  cfg$period$start <- "2026-01-19"; cfg$period$days <- 13
+  for (k in names(cfg$outputs)) cfg$outputs[[k]] <- k %in% c("quescrates", "quesmtimes", "fl")
+  res <- run_ipm(cfg, write = FALSE, progress = function(m) NULL, keep_data = FALSE)
+  pt <- ipm_report_parts(res)
+  expect_equal(names(pt$sections), c("summary", names(res$outputs)))
+  expect_false("flag_tables" %in% names(pt$files)); expect_false("anthro_xlsx" %in% names(pt$files))
+  out <- file.path(dir, "part")
+  rep <- ipm_report(res, out, sections = c("summary", "fl"), files = "data")
+  expect_true(file.exists(rep))
+  expect_true(file.exists(file.path(out, "data", "fl.csv")))
+  expect_false(file.exists(file.path(out, "team_action_plan.docx")))
+  txt <- officer::docx_summary(officer::read_docx(rep))$text
+  expect_true(any(grepl("Left out of this report", txt)))
+  expect_true(any(grepl("KEY FINDINGS", txt)))
+  expect_false(any(grepl(res$outputs$quesmtimes$title, txt, fixed = TRUE)))
+  out2 <- file.path(dir, "all"); ipm_report(res, out2)
+  expect_true(file.exists(file.path(out2, "team_action_plan.docx")))
+})

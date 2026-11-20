@@ -1,5 +1,9 @@
 # ipmR (development version)
 
+**Report built by parts (0.8.0.9004)**
+* Downloads: choose the sections of the Word report (key findings and scorecard, then each output) and the companion files (flag tables per dataset and team, team action plan, anthropometry case listing, CSV data); only the parts ticked are built, so a smaller report builds faster. The report's cover lists the sections left out. `ipm_report(sections = , files = )`, `ipm_report_parts()` (#81).
+* When the report is ready a **Report complete** window opens with the download buttons (also when you were on another page), and Downloads shows "Report complete (built at ..., in ...)"; the download buttons appear only once there is a report to download, and a note says when the ticked parts have changed since it was built (#81).
+
 **Setup in three steps**
 * Setup is one page in three steps instead of six: **Data** (drop the data, name the survey; a checklist shows what was found), **Review** (survey and period, outputs, datasets, teams, questions tested - each with a summary and a status OK / Check / Fix; only the parts that need a look are open) and **Run** (a summary of what will run). A bar at the bottom says what still needs a look, with a link to it, and has the Run button; the help of each step is behind "About this page" (#78).
 * **Advanced analysis** panel (button at the top of Setup): the flag test parameters, the **issue rules** - until now fixed in the code - and output details, each with its help. Presets: Standard (recommended), Early fieldwork (last 2 weeks, lower thresholds), Strict (fewer, stronger signals) and Stata-compatible. The settings changed from the defaults are listed in the panel (each with a reset), in the run summary and in the Word report (#79).

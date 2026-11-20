@@ -152,7 +152,7 @@ bg_child <- function(what, args, pf, src, libs) {
       list(res = res, sc = sc) },
     report = {
       unlink(args$dir, recursive = TRUE)
-      rep <- ipm_report(args$res, args$dir, progress = prog)
+      rep <- ipm_report(args$res, args$dir, progress = prog, sections = args$sections, files = args$files)
       prog("Zipping all results"); unlink(args$zip)
       old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
       utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq")
@@ -540,11 +540,12 @@ ipm_ui <- page_navbar(
         uiOutput("dsum_read_out"),
         tableOutput("dsum"), tableOutput("qpd")),
       nav_panel("Downloads", value = "downloads",
-        explain("Builds the full IPM report (Word) with all graphs and the key findings, the flag tables per dataset and per team (Word), the anthropometry case listing (Excel) and tidy CSV files for dashboards.",
-                "Click 'Build report' (1 to 10 minutes depending on the size of the survey), then download the report or the zip with everything."),
+        explain("Builds the IPM report (Word) with the sections you choose, and the companion files you choose: flag tables per dataset and per team (Word), team action plan (Word), anthropometry case listing (Excel) and tidy CSV files for dashboards.",
+                "Tick the sections and files you need (fewer parts build faster), click 'Build report', and download when the 'Report complete' message appears. You can keep using the app while it is built."),
+        uiOutput("rep_parts"),
         actionButton("build", "Build report and files", class = "btn-primary"),
         br(), br(),
-        downloadButton("dl_report", "Download IPM_report.docx"), downloadButton("dl_zip", "Download all results (.zip)")))),
+        uiOutput("dl_status")))),
 
   nav_spacer(),
   nav_item(input_dark_mode(id = "dark_mode", mode = "light")),
@@ -618,7 +619,7 @@ ipm_server <- function(input, output, session) {
               prog("Team scorecard"); sc <- tryCatch(ipm_scorecard(res), error = function(e) conditionMessage(e))
               prog("Writing summary"); res$summary <- tryCatch(if (is.list(sc)) ipm_summary(res, sc) else ipm_summary(res), error = function(e) NULL)
               list(res = res, sc = sc) },
-      report = { unlink(args$dir, recursive = TRUE); rep <- ipm_report(args$res, args$dir, progress = prog)
+      report = { unlink(args$dir, recursive = TRUE); rep <- ipm_report(args$res, args$dir, progress = prog, sections = args$sections, files = args$files)
                  prog("Zipping all results"); unlink(args$zip); old <- setwd(args$dir); on.exit(setwd(old), add = TRUE)
                  utils::zip(args$zip, list.files(".", recursive = TRUE), flags = "-r9Xq"); list(report = rep, zip = args$zip) },
       plan = ipm_ai_plan(args$res, args$sc, args$st, language = args$language, compact = args$compact, priorities = args$priorities),
@@ -1940,20 +1941,59 @@ ipm_server <- function(input, output, session) {
   output$qpd <- renderTable({ r <- rv$res$outputs$quesperday; req(r, length(r$tables)); r$tables[[1]] }, na = "")
 
   # ---------- downloads ----------
+  # the parts of the report to include (all ticked by default)
+  output$rep_parts <- renderUI({
+    res <- rv$res
+    if (is.null(res)) return(tags$p(class = "small-note", "Run the analysis first: the parts of the report are listed here once the results are ready."))
+    pt <- ipm_report_parts(res)
+    layout_columns(col_widths = c(7, 5),
+      div(checkboxGroupInput("rep_sections", tags$b("Sections of the Word report"), choiceNames = unname(pt$sections), choiceValues = names(pt$sections), selected = names(pt$sections)),
+          div(style = "margin-top:-8px; margin-bottom:10px", actionLink("rep_all", "All"), " | ", actionLink("rep_none", "None"))),
+      checkboxGroupInput("rep_files", tags$b("Companion files"), choiceNames = unname(pt$files), choiceValues = names(pt$files), selected = names(pt$files)))
+  })
+  observeEvent(input$rep_all, { req(rv$res); updateCheckboxGroupInput(session, "rep_sections", selected = names(ipm_report_parts(rv$res)$sections)) })
+  observeEvent(input$rep_none, updateCheckboxGroupInput(session, "rep_sections", selected = character()))
+  rep_built <- reactiveVal(NULL)                                  # what the report on the server contains, and when it was built
+  rep_building <- reactiveVal(FALSE)
   observeEvent(input$build, {
     res <- rv$res; req(res)
-    before <- if (!BG_OK) list.files(tempdir(), full.names = TRUE)
-    rv$report <- NULL; rv$zip <- NULL
-    start_job("report", "report", list(res = res, dir = res$cfg$results_dir, zip = file.path(sdir, "IPM_results.zip")), "Building the report",
+    secs <- input$rep_sections %||% character(); fils <- input$rep_files %||% character()
+    if (!length(secs) && !length(fils)) { showNotification("Tick at least one section or file.", type = "warning"); return() }
+    if (job_running("report")) { showNotification("The report is already being built: wait for it to finish.", type = "warning"); return() }
+    before <-if (!BG_OK) list.files(tempdir(), full.names = TRUE)
+    rv$report <- NULL; rv$zip <- NULL; rep_built(NULL); rep_building(TRUE)
+    started <- Sys.time()
+    ok <- start_job("report", "report", list(res = res, dir = res$cfg$results_dir, zip = file.path(sdir, "IPM_results.zip"), sections = secs, files = fils), "Building the report",
       if (BG_OK) "you can keep using the app while it is built" else NULL, step = 1 / 16, hold = "^Writing (flag tables|report: flag graphs)",
       done = function(r) {
+        rep_building(FALSE)
         if (!is.null(before)) { new <- setdiff(list.files(tempdir(), full.names = TRUE), before); wipe(new[!grepl("^ipm_", basename(new))]) }
         if (inherits(r, "error")) { showNotification(job_error(r), type = "error", duration = NULL); return() }
         rv$report <- r$report; rv$zip <- r$zip
-        showNotification("Report ready - use the download buttons.", type = "message", duration = 8) })
+        rep_built(list(sections = secs, files = fils, at = Sys.time(), mins = as.numeric(difftime(Sys.time(), started, units = "mins"))))
+        showModal(modalDialog(title = tagList(icon("circle-check", style = "color:#198754"), " Report complete"), easyClose = TRUE,
+          tags$p(sprintf("The IPM report was built in %s, with %d section%s and %d companion file%s.", fmt_mins(rep_built()$mins),
+                         length(secs), if (length(secs) == 1) "" else "s", length(fils), if (length(fils) == 1) "" else "s")),
+          footer = tagList(downloadButton("dl_report_m", "Download the report (Word)", class = "btn-primary"),
+                           downloadButton("dl_zip_m", "Download all results (.zip)"), modalButton("Close"))))
+      })
+    if (!isTRUE(ok)) rep_building(FALSE)
   })
-  output$dl_report <- downloadHandler(filename = function() sprintf("IPM_report_%s.docx", format(Sys.Date(), "%Y%m%d")),
-                                      content = function(f) { req(rv$report); file.copy(rv$report, f) })
-  output$dl_zip <- downloadHandler(filename = function() sprintf("IPM_results_%s.zip", format(Sys.Date(), "%Y%m%d")),
-                                   content = function(f) { req(rv$zip); file.copy(rv$zip, f) })
+  fmt_mins <- function(m) if (m < 1) sprintf("%d seconds", max(1L, round(m * 60))) else sprintf("%.1f minutes", m)
+  output$dl_status <- renderUI({
+    b <- rep_built()
+    if (isTRUE(rep_building())) return(div(class = "alert alert-info", style = "padding:8px 12px", icon("hourglass-half"), " Building the report... a 'Report complete' message appears here when it is ready to download."))
+    if (is.null(b) || is.null(rv$report)) return(tags$p(class = "small-note", "No report built yet in this session."))
+    same <- setequal(b$sections, input$rep_sections %||% character()) && setequal(b$files, input$rep_files %||% character())
+    div(class = "alert alert-success", style = "padding:10px 14px",
+      tags$b(icon("circle-check"), sprintf(" Report complete (built at %s, in %s).", format(b$at, "%H:%M"), fmt_mins(b$mins))),
+      if (!same) tags$div(class = "small-note", style = "margin-top:4px", "The ticked parts have changed since: click 'Build report' again to include them."),
+      div(style = "margin-top:8px", downloadButton("dl_report", "Download IPM_report.docx", class = "btn-primary"), downloadButton("dl_zip", "Download all results (.zip)")))
+  })
+  dl_rep <- downloadHandler(filename = function() sprintf("IPM_report_%s.docx", format(Sys.Date(), "%Y%m%d")),
+                            content = function(f) { req(rv$report); file.copy(rv$report, f) })
+  dl_zip <- downloadHandler(filename = function() sprintf("IPM_results_%s.zip", format(Sys.Date(), "%Y%m%d")),
+                            content = function(f) { req(rv$zip); file.copy(rv$zip, f) })
+  output$dl_report <- dl_rep; output$dl_report_m <- dl_rep
+  output$dl_zip <- dl_zip; output$dl_zip_m <- dl_zip
 }

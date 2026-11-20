@@ -70,13 +70,36 @@ draw_report_plots <- function(plots, dir, o, progress = function(...) NULL) {
   stats::setNames(as.list(unlist(files)), key)
 }
 
+#' Parts of the IPM report that can be chosen
+#'
+#' The sections of the Word report (key findings, then one per output of the run) and the companion files.
+#' @param res result of run_ipm()
+#' @return list(sections = named character (id = label), files = named character (id = label))
+#' @export
+ipm_report_parts <- function(res) {
+  ids <- names(res$outputs)
+  sec <- c(summary = "Key findings, team scorecard and flag rate by interviewer",
+           stats::setNames(vapply(ids, function(i) ipm_output_names[[i]] %||% i, ""), ids))
+  fil <- c(flag_tables = "Flag tables per dataset and per team (Word)", action_plan = "Team action plan (Word)",
+           anthro_xlsx = "Anthropometry case listing (Excel)", data = "Tidy data for dashboards (CSV)")
+  if (!"flaganal" %in% ids) fil <- fil[names(fil) != "flag_tables"]
+  if (!"ant_oor" %in% ids) fil <- fil[names(fil) != "anthro_xlsx"]
+  list(sections = sec, files = fil)
+}
+
 #' Write the IPM report and companion files
 #' @param res result of run_ipm(..., write = FALSE)
 #' @param results_dir output folder
 #' @param progress function(message) for progress reporting
+#' @param sections sections of the Word report to include (ids of [ipm_report_parts()]`$sections`); NULL = all
+#' @param files companion files to write (ids of [ipm_report_parts()]`$files`); NULL = all
 #' @export
-ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = function(...) NULL) {
+ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = function(...) NULL, sections = NULL, files = NULL) {
   cfg <- res$cfg; o <- cfg$options
+  pt <- ipm_report_parts(res)
+  sections <- if (is.null(sections)) names(pt$sections) else intersect(sections, names(pt$sections))
+  files <- if (is.null(files)) names(pt$files) else intersect(files, names(pt$files))
+  out_ids <- intersect(names(res$outputs), sections)
   dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
   figdir <- file.path(results_dir, ".fig"); dir.create(figdir, showWarnings = FALSE)
   on.exit(unlink(figdir, recursive = TRUE), add = TRUE)
@@ -87,7 +110,9 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   doc <- add_heading(doc, cfg$survey_name, 13, "grey15")
   doc <- add_text(doc, sprintf("Produced with ipmR %s (R port of the Stata IPM application v7.0.0 by Pierre Martel).", utils_pkgver()), 8, TRUE)
   doc <- add_text(doc, "Outputs included in this report:", 10)
-  for (id in names(res$outputs)) doc <- add_text(doc, paste("-", ipm_output_names[[id]]), 9)
+  for (id in sections) doc <- add_text(doc, paste("-", pt$sections[[id]]), 9)
+  if (length(setdiff(names(pt$sections), sections)))
+    doc <- add_text(doc, paste0("Left out of this report: ", paste(pt$sections[setdiff(names(pt$sections), sections)], collapse = "; "), "."), 8, TRUE)
   if (!is.null(res$data_summary) && nrow(res$data_summary)) {
     fd <- suppressWarnings(range(as.Date(c(res$data_summary$first_day, res$data_summary$last_day)), na.rm = TRUE))
     if (all(is.finite(fd))) doc <- add_text(doc, sprintf("Fieldwork covered by the data: %s to %s (%d days).", format(fd[1], "%d %b %Y"), format(fd[2], "%d %b %Y"), as.integer(diff(fd)) + 1L), 9)
@@ -100,11 +125,11 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   # key findings
   progress("Writing report: key findings")
   sc <- tryCatch(ipm_scorecard(res), error = function(e) NULL)                 # the one rule engine: summary, tables and plan all read it
-  sm <- tryCatch(if (!is.null(sc)) ipm_summary(res, sc) else ipm_summary(res), error = function(e) NULL)
+  sm <- if ("summary" %in% sections) tryCatch(if (!is.null(sc)) ipm_summary(res, sc) else ipm_summary(res), error = function(e) NULL)
   ht <- ipm_howto()
   allp <- list(); addp <- function(g) if (inherits(g, "ggplot")) allp[[length(allp) + 1]] <<- g
   if (!is.null(sm)) addp(sm$plots$team_module)
-  for (id in names(res$outputs)) {
+  for (id in out_ids) {                                                        # only the graphs of the sections chosen are drawn
     r <- res$outputs[[id]]
     if (id == "flaganal") { for (z in r$plots) addp(z$plot) } else for (s in r$sections) for (g in s$plots) addp(g)
   }
@@ -140,7 +165,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
       doc <- add_table_later(doc, ipm_flextable(tb, 8), later)
     }
   }
-  for (id in names(res$outputs)) {
+  for (id in out_ids) {
     r <- res$outputs[[id]]
     progress(sprintf("Writing report: %s", id))
     doc <- officer::body_add_break(doc)
@@ -152,7 +177,7 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
       for (tb in r$tables) { doc <- add_table_later(doc, ipm_flextable(tb, 7), later); doc <- add_text(doc, "", 4) }
       next
     }
-    if (id == "flaganal") { doc <- report_flags(doc, r, res, figdir, o, results_dir, progress, drawn, later); next }
+    if (id == "flaganal") { doc <- report_flags(doc, r, res, figdir, o, results_dir, progress, drawn, later, tables = "flag_tables" %in% files); next }
     doc <- add_heading(doc, r$title, 12)
     if (!is.null(ht[[id]])) doc <- add_text(doc, paste("How to read:", ht[[id]]), 8.5, TRUE)
     for (s in r$sections) for (g in s$plots) doc <- add_plot(doc, g, figdir, o, drawn)
@@ -170,7 +195,9 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   docx_splice(out, later$tables)
   file.copy(out, file.path(results_dir, sprintf("IPM_report_%s.docx", stamp)), overwrite = TRUE)
   # anthropometry case listing (Excel)
-  if (!is.null(res$outputs$ant_oor)) {
+  if ("flag_tables" %in% files && !"flaganal" %in% out_ids && !is.null(res$outputs$flaganal$tests) && nrow(res$outputs$flaganal$tests))
+    write_flag_tables(res$outputs$flaganal, res, results_dir, progress)       # flag tables wanted without the flag section
+  if ("anthro_xlsx" %in% files && !is.null(res$outputs$ant_oor)) {
     a <- res$outputs$ant_oor
     cases <- as.data.frame(a$cases)
     if (nrow(cases)) cases$doi <- as.Date(cases$doi)
@@ -186,7 +213,8 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
     openxlsx::saveWorkbook(wb, file.path(results_dir, sprintf("anthro_report_%s.xlsx", format(Sys.Date(), "%d%b%Y"))), overwrite = TRUE)
   }
   # tidy data for dashboards (Power BI / Fabric)
-  ddir <- file.path(results_dir, "data"); dir.create(ddir, showWarnings = FALSE)
+  ddir <- file.path(results_dir, "data")
+  if ("data" %in% files) { dir.create(ddir, showWarnings = FALSE)
   for (id in names(res$outputs)) {
     r <- res$outputs[[id]]
     if (id == "flaganal") {
@@ -194,13 +222,14 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
       if (!is.null(r$scores)) data.table::fwrite(r$scores, file.path(ddir, "flag_scores.csv"))
     } else if (!is.null(r$data) && nrow(r$data)) data.table::fwrite(r$data, file.path(ddir, paste0(id, ".csv")))
   }
-  # scorecard and team action plan (AI plan if one was generated in the session, otherwise rule-based)
-  # sc computed above (same scorecard as the summary)
   if (!is.null(sc)) {
-    progress("Writing team action plan")
     data.table::fwrite(sc$teams, file.path(ddir, "scorecard_teams.csv"))
     if (!is.null(sc$interviewers)) data.table::fwrite(sc$interviewers, file.path(ddir, "scorecard_interviewers.csv"))
     data.table::fwrite(sc$signals, file.path(ddir, "scorecard_signals.csv"))
+  } }
+  # team action plan (AI plan if one was generated in the session, otherwise rule-based); sc computed above (same scorecard as the summary)
+  if ("action_plan" %in% files && !is.null(sc)) {
+    progress("Writing team action plan")
     plan <- res$action_plan %||% ipm_plan_rules(sc)
     tryCatch(ipm_plan_docx(plan, file.path(results_dir, "team_action_plan.docx"), sc, cfg$survey_name, sc$survey$period),
              error = function(e) warning("Action plan not written: ", conditionMessage(e)))
@@ -208,10 +237,10 @@ ipm_report <- function(res, results_dir = res$cfg$results_dir, progress = functi
   invisible(out)
 }
 
-IPMR_VERSION <- "0.8.0.9003"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
+IPMR_VERSION <- "0.8.0.9004"   # keep equal to DESCRIPTION (checked by tests/testthat/test-version.R); the shinyapps.io bundle has no DESCRIPTION
 utils_pkgver <- function() IPMR_VERSION
 
-report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL, drawn = NULL, later = NULL) {
+report_flags <- function(doc, r, res, figdir, o, results_dir, progress = function(...) NULL, drawn = NULL, later = NULL, tables = TRUE) {
   doc <- add_heading(doc, "FLAG ANALYSIS OF INTERVIEWER BIAS IN SPECIFIED MODULES AND DATASETS", 12)
   if (is.null(r$tests) || !nrow(r$tests)) return(add_text(doc, "No flag test could be performed (check modules, teams and period of analysis)."))
   ht <- ipm_howto()
@@ -238,7 +267,7 @@ report_flags <- function(doc, r, res, figdir, o, results_dir, progress = functio
     ft <- flextable::set_table_properties(ft, layout = "fixed")
     doc <- if (is.null(later)) flextable::body_add_flextable(doc, ft) else add_table_later(doc, ft, later)
   } else doc <- add_text(doc, "None.")
-  write_flag_tables(r, res, results_dir, progress)
+  if (tables) write_flag_tables(r, res, results_dir, progress)
   doc
 }
 

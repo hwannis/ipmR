@@ -7,7 +7,9 @@
 ipm_report(
   res,
   results_dir = res$cfg$results_dir,
-  progress = function(...) NULL
+  progress = function(...) NULL,
+  sections = NULL,
+  files = NULL
 )
 }
 \arguments{
@@ -16,6 +18,10 @@ ipm_report(
 \item{results_dir}{output folder}
 
 \item{progress}{function(message) for progress reporting}
+
+\item{sections}{sections of the Word report to include (ids of \code{\link[=ipm_report_parts]{ipm_report_parts()}}\verb{$sections}); NULL = all}
+
+\item{files}{companion files to write (ids of \code{\link[=ipm_report_parts]{ipm_report_parts()}}\verb{$files}); NULL = all}
 }
 \description{
 Write the IPM report and companion files
