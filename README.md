@@ -148,7 +148,9 @@ The release asset `ipm_shinyapp.zip` (built from `inst/shinyapps/` by `deploy/sh
    - **Figures:** all graphs, each with a "How to read" note, one at a time or all the graphs of an output on one page; SVG and high-resolution PNG downloads; on the graphs of flags by module, point at a circle to see its flag table.
    - **Flag explorer:** every flagged test with a one-line reading, for example "Interviewer 102 recorded '1. YES' for 91% of cases (31/34) vs 7% for the rest of team T1 (4/59)". Click a row to see the full crosstab.
    - **Data & questionnaires:** records, dates and interviewers per dataset.
-   - **Downloads:** Word report (key findings first, then all outputs with reading notes), flag tables, anthropometry Excel listing, and CSVs.
+   - **Downloads:** choose the sections of the Word report (key findings first, then the outputs with reading notes) and the companion files (flag tables, action plan, anthropometry Excel listing, CSVs); a "Report complete" window offers the downloads when it is built.
+
+**Data explorer:** the distribution of any variable - frequencies with value labels (don't know, missing and "other" marked), or for numbers the summary, histogram and last digit (heaping) - broken down by team, interviewer, week or another variable, with a test of the differences. Filters for completed interviews, days, teams and interviewers; Excel download. Only the variables chosen are read; names and other text variables never are. "Open in Data explorer" links on the Questionnaire page and under the flag tables. In R: `ipm_explore_data()` and `ipm_tabulate()`.
 
 Every page opens with a box explaining what the page does and what the user needs to do. A **Guide** tab explains the method.
 

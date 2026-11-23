@@ -37,6 +37,11 @@ adv_read <- function(input) {                       # current values of the adva
   names(o) <- names(PSPEC); o[!vapply(o, is.null, logical(1))]
 }
 
+# link to the Data explorer with a variable chosen
+ex_link <- function(ds, var, text = NULL)
+  tags$a(href = "#", class = "ex-link", title = "Open in Data explorer: distribution of this question by team and interviewer",
+         style = "margin-left:6px; font-size:0.85em", onclick = sprintf("event.stopPropagation(); Shiny.setInputValue('ex_open', {ds: '%s', var: '%s'}, {priority: 'event'}); return false;", ds, var),
+         icon("magnifying-glass-chart"), text)
 var_choices <- function(meta, nm) {
   if (is.null(meta[[nm]])) return(c("(none)" = ""))
   v <- names(meta[[nm]]$varlab); l <- meta[[nm]]$varlab
@@ -364,6 +369,27 @@ ipm_ui <- page_navbar(
         selectInput("qh_top", NULL, c("20 with the most flags" = 20, "40 with the most flags" = 40, "80 with the most flags" = 80), selected = 40, width = "220px"),
         checkboxInput("qh_hide", "Hide those flagged in most teams (questionnaire problems)", FALSE)),
     uiOutput("qh_body")),
+  nav_panel(tagList(icon("magnifying-glass-chart"), "Data explorer"), value = "explore",
+    layout_sidebar(fillable = FALSE, border = FALSE,
+      sidebar = sidebar(id = "ex_side", width = 330, open = "always",
+        selectInput("ex_ds", "Dataset", choices = NULL, width = "100%"),
+        selectizeInput("ex_var", "Variable", choices = NULL, width = "100%", options = list(placeholder = "Type a name or a word of the label")),
+        radioButtons("ex_type", NULL, c("Auto" = "auto", "Categories" = "categorical", "Numbers" = "numeric"), inline = TRUE),
+        uiOutput("ex_weight_ui"),
+        selectInput("ex_by", "Broken down by", c("Nothing" = "none", "Team" = "team", "Interviewer" = "interv", "Week of fieldwork" = "week", "Another variable" = "var"), width = "100%"),
+        conditionalPanel("input.ex_by == 'var'", selectizeInput("ex_byvar", NULL, choices = NULL, width = "100%", options = list(placeholder = "Variable to break down by")),
+          selectInput("ex_bins", "If it is a number with many values (a score, an age), group it in", c("Fifths (quintiles)" = 5, "Quarters (quartiles)" = 4, "Thirds (terciles)" = 3, "Tenths (deciles)" = 10), width = "100%"),
+          actionLink("ex_swap", tagList(icon("right-left"), " Swap the two variables"))),
+        tags$hr(style = "margin:6px 0"),
+        checkboxInput("ex_completed", "Completed interviews only", TRUE),
+        checkboxInput("ex_blank", "Leave out blanks (question not asked)", TRUE),
+        radioButtons("ex_period", "Days of interview", c("Whole fieldwork" = "all", "Period of analysis" = "period", "Choose dates" = "custom")),
+        conditionalPanel("input.ex_period == 'custom'", dateRangeInput("ex_dates", NULL, width = "100%")),
+        selectizeInput("ex_teams", "Teams", choices = NULL, multiple = TRUE, width = "100%", options = list(placeholder = "All teams")),
+        selectizeInput("ex_intervs", "Interviewers", choices = NULL, multiple = TRUE, width = "100%", options = list(placeholder = "All interviewers"))),
+      explain("Shows the distribution of any variable of the data: frequencies of the answers (with 'don't know', missing and 'other' marked) or, for numbers, the summary, histogram and last digit (heaping). Broken down by team, interviewer, week or another variable, with a test of the differences. Only the variables you choose are read from the files, only counts and percentages are shown, and names and other text variables are never read.",
+              "Choose a dataset and a variable. To compare, choose what to break it down by; filter by days, teams or interviewers on the left. From the Flag explorer and the Questionnaire page, 'Open in Data explorer' brings you here with the variable chosen."),
+      uiOutput("ex_body"))),
 
   # ---------------- SETUP: 3 steps (data, review, run) with the advanced analysis settings on the side ----------------
   nav_panel(tagList(icon("sliders"), "Setup"), value = "setup",
@@ -650,7 +676,7 @@ ipm_server <- function(input, output, session) {
   })
   kill_jobs <- function() for (key in ls(bg)) { j <- bg[[key]]; try(j$p$kill(), silent = TRUE); try(j$pr$close(), silent = TRUE); unlink(j$pf); rm(list = key, envir = bg) }
   if (!is.null(pre <- getOption("ipmR.preload"))) isolate({   # testing only: preload a saved result
-    rv$res <- readRDS(pre); rv$sc <- tryCatch(ipm_scorecard(rv$res), error = function(e) NULL)
+    rv$res <- readRDS(pre); rv$cfg <- rv$res$cfg; rv$light <- tryCatch(ipm_load(rv$cfg, quiet = TRUE, n_max = 400), error = function(e) NULL); rv$sc <- tryCatch(ipm_scorecard(rv$res), error = function(e) NULL)
     rv$cmp <- tryCatch(ipm_history_update(rv$res, rv$sc), error = function(e) NULL) })
 
   # Setup is one page in 3 steps; the old page names lead to the step (and the part of the review) they were
@@ -1482,6 +1508,7 @@ ipm_server <- function(input, output, session) {
           tags$td(class = "lab", title = r$description %||% "",
                   tags$b(if (h$by == "question") paste(r$dataset, r$question) else paste(r$dataset, r$module)),
                   if (isTRUE(r$survey_wide)) span(class = "bf-chip old", style = "margin-left:6px", "most teams"),
+                  if (h$by == "question") ex_link(r$dataset, r$question),
                   if (h$by == "question" && !is.na(r$description)) div(class = "d", substr(r$description, 1, 60))),
           tags$td(class = "tot", sprintf("%.0f%%", r$rate), div(class = "d", sprintf("%d of %d teams", r$teams_flagged, r$teams))),
           lapply(seq_len(nrow(tm)), function(j) { k <- cmap[key(r$row, tm$team[j])]
@@ -1885,7 +1912,7 @@ ipm_server <- function(input, output, session) {
     tb <- Filter(function(z) z$dataset == np$dataset[1] && z$variable == np$varname[1] && z$interv == np$interv[1] && z$team == np$team[1], rv$res$outputs$flaganal$tables)
     if (!length(tb)) return(tags$p(class = "small-note", sprintf("Interviewer %s, question %s: flag table not available.", fmt_i(np$interv[1]), np$varname[1])))
     z <- tb[[1]]
-    card(card_header(z$title), tags$p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
+    card(card_header(z$title), tags$p(class = "small-note", z$desc, " ", ex_link(z$dataset, z$variable, "Open in Data explorer")), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
   })
 
   # ---------- results: flag explorer ----------
@@ -1902,7 +1929,7 @@ ipm_server <- function(input, output, session) {
     i <- input$flags_dt_rows_selected; req(i); f <- flagged()[i]
     tb <- Filter(function(z) z$dataset == f$dataset && z$variable == f$question && z$interv == f$interviewer, rv$res$outputs$flaganal$tables)
     req(length(tb) > 0); z <- tb[[1]]
-    card(card_header(z$title), tags$p(class = "small-note", z$desc), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
+    card(card_header(z$title), tags$p(class = "small-note", z$desc, " ", ex_link(z$dataset, z$variable, "Open in Data explorer")), div(class = "pattern", z$pattern), renderTable(z$table, digits = 0))
   })
 
   # ---------- results: flag tables by team ----------
@@ -1939,6 +1966,176 @@ ipm_server <- function(input, output, session) {
   # ---------- results: data summary ----------
   output$dsum <- renderTable({ req(rv$res); rv$res$data_summary })
   output$qpd <- renderTable({ r <- rv$res$outputs$quesperday; req(r, length(r$tables)); r$tables[[1]] }, na = "")
+
+  # ---------- data explorer ----------
+  ex_cfg <- reactive({ if (!is.null(rv$res)) rv$res$cfg else { req(rv$cfg); tryCatch(collect_cfg(), error = function(e) rv$cfg) } })
+  ex_vars <- function(ds) {                         # variables offered: no long text (names), no utility variables
+    m <- rv$light$meta[[ds]]; if (is.null(m)) return(character())
+    v <- names(m$varlab); w <- suppressWarnings(as.integer(sub("^A", "", m$fmt[v]))); txt <- grepl("^A", m$fmt[v]) & !is.na(w) & w > 1
+    v <- v[!txt & !v %in% c(toupper(.int$utility_vars), "DUMMY")]; l <- m$varlab[v]
+    stats::setNames(v, ifelse(nzchar(l), paste0(v, " - ", substr(l, 1, 70)), v))
+  }
+  observe({
+    cfg <- rv$cfg; req(cfg)
+    ds <- names(cfg$datasets)[vapply(names(cfg$datasets), function(n) !is.null(rv$light$meta[[n]]), logical(1))]
+    lab <- vapply(ds, function(n) { f <- cfg$datasets[[n]]$file %||% n; sprintf("%s (%s)", n, f) }, "")
+    sel <- isolate(input$ex_ds); updateSelectInput(session, "ex_ds", choices = stats::setNames(ds, lab), selected = if (!is.null(sel) && sel %in% ds) sel else ds[1])
+  })
+  ex_weights <- function(ds) {                      # sample weight variables of a dataset (HHWEIGHT, WMWEIGHT, poids...)
+    m <- rv$light$meta[[ds]]; if (is.null(m)) return(character())
+    v <- names(m$varlab); l <- m$varlab[v]; txt <- grepl("^A", m$fmt[v])
+    v[!txt & (grepl("WEIGHT$|WGT$", v) | grepl("sample weight|sampling weight|poids d.?.chantillon|poids de sondage|pond.ration|factor de expansi|peso muestral", l, ignore.case = TRUE))]
+  }
+  output$ex_weight_ui <- renderUI({
+    req(input$ex_ds); wv <- ex_weights(input$ex_ds)
+    if (!length(wv)) return(div(class = "small-note", style = "margin:-4px 0 10px 0", "No weight variable in this dataset (weights are usually added after fieldwork): figures are per record."))
+    lb <- rv$light$meta[[input$ex_ds]]$varlab[wv]
+    div(selectInput("ex_weight", "Weight", c("No weight (records)" = "none", stats::setNames(wv, ifelse(nzchar(lb), paste0(wv, " - ", substr(lb, 1, 40)), wv))),
+                    selected = isolate(input$ex_weight) %||% "none", width = "100%"),
+        div(class = "small-note", style = "margin:-10px 0 10px 0", "Weighted: % and means represent the population. To check the interviewers' work, use no weight (each record counts once)."))
+  })
+  ex_pending <- reactiveVal(NULL)                   # variable to select after the dataset changes ("Open in Data explorer")
+  observeEvent(input$ex_ds, {
+    req(input$ex_ds); ch <- ex_vars(input$ex_ds); p <- ex_pending()
+    s <- if (!is.null(p) && p %in% ch) p else ""; ex_pending(NULL)
+    updateSelectizeInput(session, "ex_var", choices = c("(choose)" = "", ch), selected = s, server = TRUE)
+    updateSelectizeInput(session, "ex_byvar", choices = c("(choose)" = "", ch), selected = "", server = TRUE)
+  })
+  observe({
+    cfg <- ex_cfg(); res <- rv$res
+    ti <- if (!is.null(res$team_info)) res$team_info else data.table(team = seq_along(cfg$teams$ranges %||% character()), team_label = sprintf("T%d", seq_along(cfg$teams$ranges %||% character())))
+    updateSelectizeInput(session, "ex_teams", choices = stats::setNames(ti$team, ti$team_label), selected = isolate(input$ex_teams))
+    if (!is.null(cfg$period$start)) { pb <- .int$period_bounds(cfg); updateDateRangeInput(session, "ex_dates", start = as.Date(pb$start), end = as.Date(pb$end)) }
+  })
+  ex_cache <- reactiveVal(NULL)
+  ex_data <- reactive({
+    ds <- input$ex_ds; v <- input$ex_var; req(ds, nzchar(v %||% ""))
+    need <- c(v, if (identical(input$ex_by, "var") && nzchar(input$ex_byvar %||% "")) input$ex_byvar,
+              if ((input$ex_weight %||% "none") %in% ex_weights(ds)) input$ex_weight)
+    cfg <- ex_cfg(); c0 <- isolate(ex_cache())
+    if (!is.null(c0) && identical(c0$ds, ds) && identical(c0$key, cfg_key(cfg)) && all(need %in% c0$vars)) return(c0$ed)
+    vars <- unique(c(need, if (!is.null(c0) && identical(c0$ds, ds)) utils::head(c0$vars, 8)))
+    ed <- withProgress(message = sprintf("Reading %s from %s...", paste(need, collapse = ", "), ds), value = 0.4,
+                       tryCatch(ipm_explore_data(cfg, ds, vars), error = function(e) e))
+    if (inherits(ed, "error")) { showNotification(conditionMessage(ed), type = "error", duration = 10); req(FALSE) }
+    ex_cache(list(ds = ds, vars = vars, ed = ed, key = cfg_key(cfg))); ed
+  })
+  cfg_key <- function(cfg) paste(cfg$data_dir, paste(cfg$teams$ranges, collapse = ","), cfg$teams$variable %||% "", cfg$options$woi_anchor %||% "")
+  observe({                                         # interviewers of the dataset read
+    ed <- ex_data(); il <- unique(ed$x[!is.na(interv), .(interv, interv_label)])[order(interv)]
+    updateSelectizeInput(session, "ex_intervs", choices = stats::setNames(il$interv, il$interv_label), selected = isolate(input$ex_intervs), server = TRUE)
+  })
+  ex_tab <- reactive({
+    ed <- ex_data(); v <- input$ex_var; req(v %in% names(ed$x))
+    by <- input$ex_by %||% "none"; if (by == "var" && !nzchar(input$ex_byvar %||% "")) by <- "none"
+    pr <- input$ex_period %||% "all"; cfg <- ex_cfg()
+    fr <- to <- NULL
+    if (pr == "period" && !is.null(cfg$period$start)) { pb <- .int$period_bounds(cfg); fr <- pb$start; to <- pb$end }
+    if (pr == "custom" && length(input$ex_dates) == 2) { fr <- input$ex_dates[1]; to <- input$ex_dates[2] }
+    tryCatch(ipm_tabulate(ed, v, by = by, by_var = input$ex_byvar, completed = isTRUE(input$ex_completed), from = fr, to = to,
+                          teams = input$ex_teams, intervs = input$ex_intervs, type = input$ex_type %||% "auto", skip_blank = !isFALSE(input$ex_blank),
+                          by_groups = as.integer(input$ex_bins %||% 5),
+                          weight = if (!(input$ex_weight %||% "none") %in% c("none", "") && input$ex_weight %in% names(ed$x)) input$ex_weight),
+             error = function(e) { showNotification(conditionMessage(e), type = "error"); NULL })
+  })
+  fmt_n <- function(x, d = 1) ifelse(is.na(x), "", formatC(x, format = "f", digits = d, big.mark = ","))
+  ex_tables <- reactive({                           # the tables shown (and downloaded / sent to the AI)
+    t <- ex_tab(); req(t); out <- list()
+    if (!is.null(t$freq)) out$frequencies <- data.frame(Value = ifelse(is.na(t$freq$value), "", as.character(t$freq$value)), Label = ifelse(is.na(t$freq$label), "", t$freq$label),
+                                                        N = t$freq$n, `%` = round(t$freq$pct, 1), `Cumulative %` = round(t$freq$cum_pct, 1), check.names = FALSE)
+    if (!is.null(t$freq) && !is.null(t$weight)) names(out$frequencies)[4:5] <- c("% (weighted)", "Cumulative % (weighted)")
+    if (!is.null(t$stats)) out$summary <- as.data.frame(t$stats[, lapply(.SD, function(z) round(z, 2))])
+    if (!is.null(t$special)) out$special_codes <- as.data.frame(t$special)
+    if (!is.null(t$digits)) out$last_digit <- data.frame(Digit = t$digits$digit, N = t$digits$n, `%` = round(t$digits$pct, 1), check.names = FALSE)
+    if (!is.null(t$cross)) {
+      w <- data.table::dcast(t$cross, group + key ~ value_label, value.var = "pct", fill = 0)
+      w <- w[order(key)]; n <- t$groups[match(w$key, t$groups$key)]$n
+      w[, key := NULL]; nm <- setdiff(names(w), "group"); w[, (nm) := lapply(.SD, round, 1), .SDcols = nm]
+      out$by_group <- data.frame(stats::setNames(w[, "group"], t$by_label), N = n, as.data.frame(w[, nm, with = FALSE]), check.names = FALSE)
+    }
+    if (!is.null(t$num_by)) { cs <- copy(t$num_by)[order(key)]; cs[, key := NULL]
+      nm <- setdiff(names(cs), c("group", "n")); dg <- if (max(abs(unlist(cs[, nm, with = FALSE])), na.rm = TRUE) < 10) 2 else 1
+      cs[, (nm) := lapply(.SD, round, dg), .SDcols = nm]
+      if (all(is.na(cs$pct_0_5))) cs[, pct_0_5 := NULL]
+      old <- c("group", "n", "mean", "sd", "min", "p5", "median", "p95", "max", "pct_0_5"); new <- c(t$by_label, "N", "Mean", "SD", "Min", "5th pct", "Median", "95th pct", "Max", "% ending in 0 or 5")
+      setnames(cs, intersect(old, names(cs)), new[old %in% names(cs)]); out$by_group <- as.data.frame(cs) }
+    out
+  })
+  ex_dt <- function(df, pct_cols = NULL) DT::datatable(df, rownames = FALSE, class = "compact stripe", options = list(dom = if (nrow(df) > 15) "tip" else "t", pageLength = 15, scrollX = TRUE))
+  output$ex_body <- renderUI({
+    if (is.null(rv$cfg)) return(div(class = "bf-empty", tags$h4("No data loaded"), tags$p("Load the survey data under Setup first: the explorer reads the variables from those files.")))
+    if (!nzchar(input$ex_var %||% "")) return(tags$p(class = "small-note", style = "margin-top:20px", "Choose a dataset and a variable on the left."))
+    t <- ex_tab(); req(t)
+    filt <- c(if (isTRUE(input$ex_completed)) "completed interviews" else "all records",
+              switch(input$ex_period %||% "all", all = "whole fieldwork", period = paste("period of analysis", tryCatch(.int$period_bounds(ex_cfg())$label, error = function(e) "")),
+                     custom = paste(format(input$ex_dates, "%d %b %Y"), collapse = " - ")),
+              if (length(input$ex_teams)) paste(length(input$ex_teams), "team(s)"), if (length(input$ex_intervs)) paste(length(input$ex_intervs), "interviewer(s)"))
+    head <- div(class = "bf-card", tags$h4(style = "margin:0", t$var, if (nzchar(t$label)) tags$span(style = "font-weight:normal", paste("-", t$label))),
+                div(class = "small-note", sprintf("%s records (%s)%s; %s.", format(t$n, big.mark = ","), paste(filt, collapse = ", "),
+                                                  paste0(if (!isFALSE(input$ex_blank) && t$blank) sprintf("; %s blank records left out (question not asked)", format(t$blank, big.mark = ",")) else "",
+                                                         if (!is.null(t$weight)) sprintf("; %% and means weighted with %s (N = records)%s", t$weight,
+                                                                                         if (t$no_weight) sprintf(", %s records without a weight left out", format(t$no_weight, big.mark = ",")) else "") else ""),
+                                                  if (t$type == "numeric") "shown as numbers" else "shown as categories")),
+                div(style = "margin-top:8px", downloadButton("ex_dl", "Download the tables (Excel)", class = "btn-sm"),
+                    actionButton("ex_read", tagList(icon("wand-magic-sparkles"), "Read with AI"), class = "btn-sm btn-outline-primary")))
+    if (!t$n) return(tagList(head, tags$p("No record with these filters.")))
+    tb <- ex_tables()
+    main <- if (t$type == "categorical") layout_columns(col_widths = c(6, 6),
+        card(card_header("Frequencies"), DT::renderDT(ex_dt(tb$frequencies)),
+             if (any(t$freq$special)) div(class = "small-note", sprintf("Don't know, missing, refused, 'other' and blanks (orange in the graph): %.1f%% of records.", sum(t$freq$pct[t$freq$special])))),
+        card(card_header("Distribution"), renderPlot(ipm_tab_plot(t, "dist"), height = max(260, 24 * min(40, nrow(t$freq)) + 90))))
+      else tagList(
+        layout_columns(col_widths = c(6, 6),
+          card(card_header("Summary"), tableOutput("ex_sum"),
+               if (!is.null(tb$special_codes)) div(class = "small-note", "Codes labelled don't know / missing / other, left out of the summary:", tableOutput("ex_spec"))),
+          card(card_header("Histogram"), renderPlot(ipm_tab_plot(t, "dist"), height = 280))),
+        if (!is.null(t$digits)) card(card_header("Last digit (heaping)"), renderPlot(ipm_tab_plot(t, "digits"), height = 250),
+             div(class = "small-note", "For ages, weights, heights, times and amounts, each last digit should appear about 10% of the time. Many more 0s and 5s mean the values were rounded or guessed (heaping).")))
+    byp <- if (t$by != "none" && !is.null(t$groups)) {
+      ng <- nrow(t$groups)
+      card(card_header(paste("By", (if (t$by == "var") t$by_label else tolower(t$by_label)))),
+           if (!is.null(t$binned)) div(class = "small-note", style = "margin-bottom:6px", icon("circle-info"),
+             sprintf(" %s is a number with many values: it is grouped in %d %ss of about equal size (choose the number of groups on the left). To see the average, minimum and maximum of %s for each answer of %s instead, use 'Swap the two variables'.",
+                     t$binned$var, t$binned$groups, tolower(t$binned$name), t$binned$var, t$var)),
+           if (is.null(t$test)) div(class = "small-note", style = "margin-bottom:6px", "No test: there is only one group (or one answer) with records.")
+           else div(class = "small-note", style = "margin-bottom:6px",
+             sprintf("%s test of the differences between the %d groups%s: %s. %s", t$test$name, ng, if (!is.null(t$weight)) " (on the records, unweighted)" else "", if (t$test$p < 1e-4) "p < 0.0001" else paste("p =", signif(t$test$p, 2)),
+                     if (t$test$p < 0.001) "The groups differ more than chance would explain: look at the groups far from the others."
+                     else if (t$test$p < 0.05) "Some difference between the groups, but it could be chance (the flag analysis uses p < 0.001)." else "No clear difference between the groups.")),
+           renderPlot(ipm_tab_plot(t, "by"), height = max(260, 22 * min(ng, 60) + 110)),
+           DT::renderDT(ex_dt(tb$by_group)))
+    }
+    tagList(head, uiOutput("ex_read_out"), main, byp)
+  })
+  output$ex_sum <- renderTable({ t <- ex_tab(); req(t$stats); s <- t$stats
+    data.frame(` ` = c("Values", "Blank", "Mean", "SD", "Min", "5th percentile", "Median", "95th percentile", "Max"),
+               Value = c(fmt_n(s$n, 0), fmt_n(t$blank, 0), fmt_n(s$mean, 2), fmt_n(s$sd, 2), fmt_n(s$min, 2), fmt_n(s$p5, 2), fmt_n(s$median, 2), fmt_n(s$p95, 2), fmt_n(s$max, 2)), check.names = FALSE) })
+  output$ex_spec <- renderTable({ t <- ex_tab(); req(t$special); as.data.frame(t$special) })
+  output$ex_dl <- downloadHandler(filename = function() sprintf("explorer_%s_%s_%s.xlsx", input$ex_ds, input$ex_var, format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { tb <- ex_tables(); wb <- openxlsx::createWorkbook()
+      for (n in names(tb)) { openxlsx::addWorksheet(wb, substr(n, 1, 31)); openxlsx::writeData(wb, substr(n, 1, 31), tb[[n]]) }
+      openxlsx::saveWorkbook(wb, f, overwrite = TRUE) })
+  observeEvent(input$ex_read, {
+    t <- ex_tab(); req(t)
+    ai_read(paste0("ex:", input$ex_ds, ":", t$var), sprintf("Distribution of %s (%s) in the %s dataset%s", t$var, t$label, input$ex_ds,
+                                                             if (t$by != "none") paste(", by", (if (t$by == "var") t$by_label else tolower(t$by_label))) else ""),
+            c(ex_tables(), list(test = t$test)),
+            "Say what stands out: unusual answers, many don't know / missing, heaping, and groups (teams, interviewers, weeks) far from the others. Say what a supervisor should check.")
+  })
+  output$ex_read_out <- renderUI({ t <- ex_tab(); req(t); read_box(paste0("ex:", input$ex_ds, ":", t$var)) })
+  observeEvent(input$ex_swap, {                    # the break-down variable becomes the variable, and the other way round
+    a <- input$ex_var; b <- input$ex_byvar; req(nzchar(a %||% ""), nzchar(b %||% ""))
+    ch <- c("(choose)" = "", ex_vars(input$ex_ds))
+    updateSelectizeInput(session, "ex_var", choices = ch, selected = b, server = TRUE)
+    updateSelectizeInput(session, "ex_byvar", choices = ch, selected = a, server = TRUE)
+  })
+  open_explorer <- function(ds, var) {             # from the flag explorer and the Questionnaire page
+    req(ds, var); ex_pending(var)
+    if (identical(input$ex_ds, ds)) { ex_pending(NULL); updateSelectizeInput(session, "ex_var", choices = c("(choose)" = "", ex_vars(ds)), selected = var, server = TRUE) }
+    else updateSelectInput(session, "ex_ds", selected = ds)
+    bslib::nav_select("nav", "explore")
+  }
+  observeEvent(input$ex_open, { o <- input$ex_open; open_explorer(o$ds, o$var) })
 
   # ---------- downloads ----------
   # the parts of the report to include (all ticked by default)
