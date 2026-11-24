@@ -53,4 +53,5 @@ ipm_internals <- function() list(output_names = ipm_output_names, hhm_defs = hhm
                                  normalise = normalise_config, read_cols = read_any_cols, assign_teams = assign_teams,
                                  flag_doc = write_flag_doc, version = IPMR_VERSION, health_areas = health_areas, trend_titles = trend_titles, history_on = history_on, history_dates = history_dates, issue_key = issue_key, action_states = action_states,
                                  match_preset = match_preset, preset_values = preset_values, rule_text = rule_text,
-                                 period_bounds = period_bounds, utility_vars = utility_vars)
+                                 period_bounds = period_bounds, utility_vars = utility_vars,
+                                 fct_param_spec = fct_param_spec, fct_display = fct_display, fct_ov_plot = fct_ov_plot)

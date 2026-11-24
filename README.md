@@ -150,6 +150,8 @@ The release asset `ipm_shinyapp.zip` (built from `inst/shinyapps/` by `deploy/sh
    - **Data & questionnaires:** records, dates and interviewers per dataset.
    - **Downloads:** choose the sections of the Word report (key findings first, then the outputs with reading notes) and the companion files (flag tables, action plan, anthropometry Excel listing, CSVs); a "Report complete" window offers the downloads when it is built.
 
+**Field check tables:** the standard MICS7 Field Check Tables (F1 to F20 of the central office SPSS syntaxes: response rates, eligible members per household, age displacement, dates of birth, key answers, observations, anthropometry, birth history, modules) by team or interviewer, with the targets of 'targets.sps' set on a Parameters tab, a summary grid of the targets not met, a graph per table, a performance overview by halves of fieldwork, and the Excel workbook with one sheet per table. Tables whose questions are not in the survey are listed as not produced. In R: `ipm_fct_data()`, `ipm_fct()` and `ipm_fct_xlsx()`.
+
 **Data explorer:** the distribution of any variable - frequencies with value labels (don't know, missing and "other" marked), or for numbers the summary, histogram and last digit (heaping) - broken down by team, interviewer, week or another variable, with a test of the differences. Filters for completed interviews, days, teams and interviewers; Excel download. Only the variables chosen are read; names and other text variables never are. "Open in Data explorer" links on the Questionnaire page and under the flag tables. In R: `ipm_explore_data()` and `ipm_tabulate()`.
 
 Every page opens with a box explaining what the page does and what the user needs to do. A **Guide** tab explains the method.

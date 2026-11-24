@@ -74,3 +74,45 @@ add_synth_fs <- function(dir) {
   haven::write_sav(fs, file.path(dir, "fs.sav"))
   dir
 }
+
+# synthetic data for the Field Check Tables (#83): area and eligible members in hh.sav, women (wm.sav), under-5 (ch.sav)
+# and birth history (bh.sav) linked to the household members, with known patterns
+add_synth_fct <- function(dir) {
+  set.seed(11)
+  lab <- function(x, l) haven::labelled(x, label = l)
+  hh <- haven::read_sav(file.path(dir, "hh.sav")); hl <- haven::read_sav(file.path(dir, "hl.sav"))
+  done <- as.numeric(hh$HH46) == 1
+  key <- paste(hh$HH1, hh$HH2); hk <- paste(hl$HH1, hl$HH2)
+  w <- as.numeric(hl$HL4) == 2 & as.numeric(hl$HL6) >= 15 & as.numeric(hl$HL6) <= 49
+  cnt <- function(f) { z <- tapply(f, factor(hk, levels = key), sum); z[is.na(z)] <- 0; as.integer(ifelse(done, z, NA)) }
+  hh$HH6 <- haven::labelled(sample(1:2, nrow(hh), TRUE), c(URBAN = 1, RURAL = 2), label = "Area")
+  hh$HH49 <- lab(cnt(w), "Number of women 15-49")
+  hh$HH51 <- lab(cnt(as.numeric(hl$HL6) <= 4), "Number of children under 5")
+  hh$HH52 <- lab(cnt(as.numeric(hl$HL6) >= 5 & as.numeric(hl$HL6) <= 17), "Number of children 5-17")
+  hh$HW1 <- haven::labelled(ifelse(done, ifelse(as.numeric(hh$HH3) == 31, 4, sample(c(1, 1, 1, 1, 1, 2, 5), nrow(hh), TRUE)), NA),
+                            c(`OBSERVED: FIXED` = 1, `OBSERVED: MOBILE` = 2, `NOT IN DWELLING` = 4, `NO PERMISSION` = 5), label = "Place for handwashing")
+  haven::write_sav(hh, file.path(dir, "hh.sav"))
+  # women: the women 15-49 of completed households; interviewer 22 records few months of birth
+  m <- match(hk, key); wl <- hl[w & done[m], ]; mw <- match(paste(wl$HH1, wl$HH2), key); n <- nrow(wl)
+  iv <- as.numeric(hh$HH3)[mw]; d <- as.Date(sprintf("%d-%02d-%02d", as.numeric(hh$HH5Y)[mw], as.numeric(hh$HH5M)[mw], as.numeric(hh$HH5D)[mw]))
+  res <- sample(c(1, 1, 1, 1, 1, 1, 1, 1, 2, 3), n, TRUE)
+  ceb <- ifelse(res == 1, ifelse(iv == 12, 0, sample(0:5, n, TRUE)), NA)
+  wm <- data.frame(HH1 = lab(as.numeric(wl$HH1), "Cluster number"), HH2 = lab(as.numeric(wl$HH2), "Household number"), LN = lab(as.numeric(wl$HL1), "Line number"),
+                   WM3 = lab(as.numeric(wl$HL1), "Woman's line number"), WM5 = lab(iv, "Interviewer number"), WM4 = lab(iv %/% 10 * 10, "Supervisor number"),
+                   WM6D = lab(as.integer(format(d, "%d")), "Day of interview"), WM6M = lab(as.integer(format(d, "%m")), "Month of interview"), WM6Y = lab(as.integer(format(d, "%Y")), "Year of interview"),
+                   WM17 = haven::labelled(res, c(COMPLETED = 1, `NOT AT HOME` = 2, REFUSED = 3), label = "Result of woman's interview"),
+                   WB3M = lab(ifelse(res == 1, ifelse(iv == 22, 98, sample(1:12, n, TRUE)), NA), "Month of birth"),
+                   WB3Y = lab(ifelse(res == 1, 2026 - as.numeric(wl$HL6), NA), "Year of birth"), WB4 = lab(ifelse(res == 1, as.numeric(wl$HL6), NA), "Age"),
+                   CEB = lab(ceb, "Children ever born"), CSURV = lab(ceb, "Children surviving"), CDEAD = lab(ifelse(res == 1, 0, NA), "Children dead"))
+  haven::write_sav(wm, file.path(dir, "wm.sav"))
+  # birth history: one record per child ever born, a few deaths at 12 months / '1 year'
+  k <- ifelse(is.na(ceb), 0, ceb); b <- wm[rep(seq_len(n), k), c("HH1", "HH2", "LN")]; nb <- nrow(b)
+  dead <- sample(c(1, 1, 1, 1, 1, 1, 1, 1, 1, 2), nb, TRUE)
+  bh <- data.frame(HH1 = lab(as.numeric(b$HH1), "Cluster number"), HH2 = lab(as.numeric(b$HH2), "Household number"), LN = lab(as.numeric(b$LN), "Line number"),
+                   BH0 = lab(sequence(k), "Birth number"), BH4M = lab(sample(c(1:12, 98), nb, TRUE), "Month of birth"), BH4Y = lab(sample(2005:2025, nb, TRUE), "Year of birth"),
+                   BH5 = lab(dead, "Child alive"), BH6 = lab(ifelse(dead == 1, sample(0:20, nb, TRUE), NA), "Age"),
+                   BH9U = lab(ifelse(dead == 2, sample(2:3, nb, TRUE), NA), "Age at death unit"), BH9N = lab(rep(NA_real_, nb), "Age at death number"))
+  bh$BH9N <- lab(ifelse(dead == 2, ifelse(as.numeric(bh$BH9U) == 3, 1, sample(c(8:16, 12, 12), nb, TRUE)), NA), "Age at death number")
+  haven::write_sav(bh, file.path(dir, "bh.sav"))
+  dir
+}

@@ -353,7 +353,25 @@ ipm_ui <- page_navbar(
     .bf-empty {max-width:640px; margin:60px auto; text-align:center}
     .bf-ev {border-top:1px solid #eef0f3; padding:10px 0}
     .bf-ev .e {font-size:0.85em; color:#444; margin-top:3px}
-    .bf-ev .a {font-size:0.85em; color:#2B3F87; margin-top:3px}"))),
+    .bf-ev .a {font-size:0.85em; color:#2B3F87; margin-top:3px}
+    .fct-grid {border-collapse:separate; border-spacing:2px; font-size:0.78em}
+    .fct-grid th {font-weight:600; text-align:center; padding:2px 4px; white-space:nowrap}
+    .fct-grid th.t {cursor:pointer; color:#2B3F87; writing-mode:vertical-rl; transform:rotate(180deg); height:64px; vertical-align:bottom}
+    .fct-grid th.t:hover {text-decoration:underline}
+    .fct-grid td.r {text-align:left; padding-right:8px; white-space:nowrap; font-weight:600}
+    .fct-grid td.c {width:24px; height:20px; text-align:center; border-radius:3px; cursor:pointer}
+    .fct-grid td.ok {background:#CDE9C1} .fct-grid td.bad {background:#E2231A; color:white} .fct-grid td.na {background:#F1F2F4}
+    .fct-grid td.n {font-weight:600; padding-left:8px}
+    .fct-grid tr.tot td {border-bottom:2px solid #B6B7B8}
+    .fct-kpi {display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px}
+    .fct-kpi div {background:#F4F8FB; border-left:4px solid #1CABE2; padding:8px 14px; min-width:150px}
+    .fct-kpi div b {display:block; font-size:1.5em; color:#374EA2}
+    .fct-kpi div.r {border-left-color:#E2231A} .fct-kpi div.r b {color:#E2231A}
+    #fct_dt td:first-child, #fct_ov_dt td:first-child {white-space:nowrap}
+    span.fct-bad {background:#F8CBAD; color:#9C0006; font-weight:700; padding:1px 4px; border-radius:3px}
+    table.dataTable tr.fct-total td {font-weight:700; background:#F2F2F2 !important}
+    [data-bs-theme=dark] .fct-grid td.ok {background:#2f5a2a} [data-bs-theme=dark] .fct-grid td.na {background:#2a2f36}
+    [data-bs-theme=dark] .fct-kpi div {background:#1b2530} [data-bs-theme=dark] table.dataTable tr.fct-total td {background:#2a2f36 !important}"))),
 
   # ---------------- BRIEFING (home after a run) ----------------
   nav_panel(tagList(icon("bolt"), "Briefing"), value = "briefing", uiOutput("brief")),
@@ -369,6 +387,28 @@ ipm_ui <- page_navbar(
         selectInput("qh_top", NULL, c("20 with the most flags" = 20, "40 with the most flags" = 40, "80 with the most flags" = 80), selected = 40, width = "220px"),
         checkboxInput("qh_hide", "Hide those flagged in most teams (questionnaire problems)", FALSE)),
     uiOutput("qh_body")),
+  nav_panel(tagList(icon("clipboard-check"), "Field check tables"), value = "fct",
+    layout_sidebar(fillable = FALSE, border = FALSE,
+      sidebar = sidebar(id = "fct_side", width = 300, open = "always",
+        uiOutput("fct_read_ui"),
+        radioButtons("fct_rows", "One row per", c("Team" = "team", "Interviewer" = "interv"), inline = TRUE),
+        radioButtons("fct_period", "Days of interview", c("Whole fieldwork to date" = "all", "Period of analysis" = "period", "Choose dates" = "custom")),
+        conditionalPanel("input.fct_period == 'custom'", dateRangeInput("fct_dates", NULL, width = "100%")),
+        selectizeInput("fct_teams", "Teams", choices = NULL, multiple = TRUE, width = "100%", options = list(placeholder = "All teams")),
+        tags$hr(style = "margin:6px 0"),
+        downloadButton("fct_dl", "All tables (Excel)", class = "btn-sm btn-outline-primary w-100"),
+        div(class = "small-note", style = "margin-top:6px", "One sheet per table as in the MICS7 FCT workbook, targets not met in red, with the summary, the overview and the parameters.")),
+      explain("Produces the standard MICS7 Field Check Tables (the SPSS syntaxes 'MICS7 - Table F1...F20' of the central office) from the data loaded under Setup: response rates, eligible members per household, age displacement, completeness of dates of birth, key answers, observations, anthropometry, birth history and modules, by team or interviewer, with the targets of 'targets.sps'. Tables whose questions are not in the data are listed as not produced.",
+              "Click 'Read the data' (only the variables the tables need are read; names are never read). Set the expected numbers of eligible members and the other targets under Parameters, then 'Apply'. 'Summary' shows the teams and tables where a target is not met: click a table to open it. The Excel workbook has all the tables."),
+      navset_underline(id = "fct_tabs",
+        nav_panel(tagList(icon("table-cells-large"), "Summary"), value = "sum", uiOutput("fct_sum")),
+        nav_panel(tagList(icon("table"), "Tables"), value = "tab",
+          div(class = "tp-head", selectInput("fct_pick", NULL, choices = NULL, width = "460px"),
+              actionButton("fct_prev", icon("chevron-left"), class = "btn-sm btn-outline-secondary", title = "Previous table"),
+              actionButton("fct_next", icon("chevron-right"), class = "btn-sm btn-outline-secondary", title = "Next table")),
+          uiOutput("fct_tab_ui")),
+        nav_panel(tagList(icon("chart-column"), "Performance overview"), value = "ov", uiOutput("fct_ov")),
+        nav_panel(tagList(icon("sliders"), "Parameters"), value = "par", uiOutput("fct_par_ui"))))),
   nav_panel(tagList(icon("magnifying-glass-chart"), "Data explorer"), value = "explore",
     layout_sidebar(fillable = FALSE, border = FALSE,
       sidebar = sidebar(id = "ex_side", width = 330, open = "always",
@@ -582,7 +622,8 @@ ipm_ui <- page_navbar(
         tags$li(tags$b("Data: "), "upload the latest export of the fieldwork data (.sav)."),
         tags$li(tags$b("Settings, datasets, teams, flags: "), "checked automatically - review them the first time, then save the settings."),
         tags$li(tags$b("Run: "), "computes everything."),
-        tags$li(tags$b("Results: "), "start with 'Summary & priorities' and 'Team scorecard' (priority of each team with the evidence), then 'Action plan (AI)' for a team-by-team plan and questions (rule-based plan for the routine weekly check and the full list of what is flagged; AI plan for a readable briefing to supervisors and managers; or both); check with the figures and the flag explorer; download the Word report and action plan to share.")),
+        tags$li(tags$b("Results: "), "start with 'Summary & priorities' and 'Team scorecard' (priority of each team with the evidence), then 'Action plan (AI)' for a team-by-team plan and questions (rule-based plan for the routine weekly check and the full list of what is flagged; AI plan for a readable briefing to supervisors and managers; or both); check with the figures and the flag explorer; download the Word report and action plan to share."),
+        tags$li(tags$b("Field check tables: "), "the standard MICS7 Field Check Tables (F1 to F20) by team or interviewer, without SPSS: read the data, set the targets under Parameters, look at the summary grid of the targets not met, open each table and its graph, and download the Excel workbook. They do not need a run of the analysis.")),
       tags$p("Recommended rhythm: every 1-2 weeks from the 2nd-3rd week of fieldwork, with the last 2-3 weeks as period of analysis; share a limited number of priorities with the field teams each time."),
       tags$h5("How to read each output"),
       tags$dl(lapply(names(output_names), function(id) tagList(tags$dt(output_names[[id]]), tags$dd(howto[[id]] %||% ""))))),
@@ -987,6 +1028,7 @@ ipm_server <- function(input, output, session) {
       cfg$extras[[k]] <- e
     }
     a <- adv_read(input); for (k in names(a)) cfg$options[[k]] <- a[[k]]
+    if (!is.null(fct_keep())) cfg$fct <- fct_keep()                # field check table parameters remembered with the settings
     cfg
   }
   output$cfg_download <- downloadHandler(filename = function() "ipm_settings.yml", content = function(f) {
@@ -2136,6 +2178,210 @@ ipm_server <- function(input, output, session) {
     bslib::nav_select("nav", "explore")
   }
   observeEvent(input$ex_open, { o <- input$ex_open; open_explorer(o$ds, o$var) })
+
+  # ---------- field check tables (MICS7 FCT) ----------
+  FSPEC <- .int$fct_param_spec()
+  fct_data <- reactiveVal(NULL)                     # data read for the tables: list(fd, key)
+  fct_keep <- reactiveVal(NULL)                     # parameters remembered with the survey settings
+  fct_par <- reactiveVal(ipm_fct_defaults())        # parameters applied to the tables
+  observeEvent(rv$cfg, {                            # new data or settings: their FCT parameters
+    k <- rv$cfg$fct; fct_keep(k); fct_par(utils::modifyList(ipm_fct_defaults(), k %||% list()))
+    if (!is.null(fct_data()) && !identical(fct_data()$key, cfg_key(rv$cfg))) fct_data(NULL)
+  }, ignoreNULL = FALSE)
+  output$fct_read_ui <- renderUI({
+    f <- fct_data()
+    tagList(actionButton("fct_read", tagList(icon(if (is.null(f)) "play" else "rotate"), if (is.null(f)) " Read the data" else " Read the data again"),
+                         class = if (is.null(f)) "btn-primary w-100" else "btn-sm btn-outline-primary w-100"),
+            div(class = "small-note", style = "margin:6px 0 12px 0",
+                if (is.null(f)) "Reads the variables of the tables from the data files (seconds to a minute)."
+                else sprintf("Read at %s: %s.", format(f$fd$read_at, "%H:%M"), paste(sprintf("%s %s", format(vapply(f$fd$ds, nrow, 0L), big.mark = ","), names(f$fd$ds)), collapse = ", "))))
+  })
+  fct_do_read <- function() {
+    if (is.null(rv$cfg)) { showNotification("Load the survey data under Setup first.", type = "warning"); return() }
+    cfg <- ex_cfg()
+    fd <- withProgress(message = "Reading the data for the field check tables...", value = 0.4, tryCatch(ipm_fct_data(cfg), error = function(e) e))
+    if (inherits(fd, "error")) { showNotification(conditionMessage(fd), type = "error", duration = 10); return() }
+    fct_data(list(fd = fd, key = cfg_key(cfg)))
+  }
+  observeEvent(input$fct_read, fct_do_read())
+  observeEvent(input$fct_read2, fct_do_read())
+  observe({
+    f <- fct_data(); cfg <- ex_cfg()
+    ti <- if (!is.null(f)) f$fd$team_info else if (!is.null(rv$res$team_info)) rv$res$team_info else NULL
+    if (!is.null(ti)) updateSelectizeInput(session, "fct_teams", choices = stats::setNames(ti$team, ti$team_label), selected = isolate(input$fct_teams))
+    if (!is.null(cfg$period$start)) { pb <- .int$period_bounds(cfg); updateDateRangeInput(session, "fct_dates", start = as.Date(pb$start), end = as.Date(pb$end)) }
+  })
+  fct_res <- reactive({
+    f <- fct_data(); req(f); p <- fct_par()
+    pr <- input$fct_period %||% "all"; cfg <- ex_cfg(); fr <- to <- NULL
+    if (pr == "period" && !is.null(cfg$period$start)) { pb <- .int$period_bounds(cfg); fr <- pb$start; to <- pb$end }
+    if (pr == "custom" && length(input$fct_dates) == 2) { fr <- input$fct_dates[1]; to <- input$fct_dates[2] }
+    if (!nzchar(p$survey_label %||% "")) p$survey_label <- trimws(input$survey_name %||% cfg$survey_name %||% "")
+    withProgress(message = "Building the field check tables...", value = 0.5,
+      tryCatch(ipm_fct(f$fd, p, rows = input$fct_rows %||% "team", from = fr, to = to, teams = input$fct_teams),
+               error = function(e) { showNotification(conditionMessage(e), type = "error", duration = 10); NULL }))
+  })
+  observe({                                          # table picker, grouped by section
+    fc <- fct_res(); req(fc)
+    tb <- fc$tables; sec <- vapply(tb, `[[`, "", "section")
+    ch <- lapply(split(names(tb), factor(sec, levels = unique(sec))), function(ids)
+      stats::setNames(ids, vapply(tb[ids], function(t) paste0(t$title, if (!isTRUE(t$available)) " (not in the data)" else ""), "")))
+    s <- isolate(input$fct_pick); updateSelectInput(session, "fct_pick", choices = ch, selected = if (!is.null(s) && s %in% names(tb)) s else names(tb)[1])
+  })
+  observeEvent(input$fct_open, { updateSelectInput(session, "fct_pick", selected = input$fct_open); bslib::nav_select("fct_tabs", "tab") })
+  fct_step <- function(k) { fc <- fct_res(); req(fc); ids <- names(fc$tables); i <- match(input$fct_pick, ids)
+    if (!is.na(i) && i + k >= 1 && i + k <= length(ids)) updateSelectInput(session, "fct_pick", selected = ids[i + k]) }
+  observeEvent(input$fct_prev, fct_step(-1)); observeEvent(input$fct_next, fct_step(1))
+
+  # summary: tables x teams, target met or not
+  output$fct_sum <- renderUI({
+    if (is.null(rv$cfg)) return(div(class = "bf-empty", tags$h4("No data loaded"), tags$p("Load the survey data under Setup first: the field check tables are produced from those files.")))
+    if (is.null(fct_data())) return(div(class = "bf-empty", tags$h4(icon("clipboard-check"), " Field check tables"),
+      tags$p("The MICS7 standard Field Check Tables (F1 to F20), by team or interviewer, with the targets not met in red."),
+      actionButton("fct_read2", tagList(icon("play"), " Read the data and build the tables"), class = "btn-primary")))
+    fc <- fct_res(); req(fc)
+    tb <- fc$tables; av <- vapply(tb, function(t) isTRUE(t$available), TRUE); s <- fc$summary
+    who <- if (fc$rows == "interv") "interviewers" else "teams"
+    na_list <- if (any(!av)) tags$details(style = "margin-top:10px", tags$summary(sprintf("%d table%s not produced (questions not in the data)", sum(!av), if (sum(!av) == 1) "" else "s")),
+      tags$ul(class = "small-note", lapply(tb[!av], function(t) tags$li(tags$b(t$title), ": ", t$why))))
+    if (is.null(s) || !nrow(s)) return(tagList(tags$p("No table with a target could be computed."), na_list))
+    ids <- unique(s$id); rk <- unique(s[, .(row, rkey)]); rk <- rk[order(row != "Total", rkey)]
+    m <- s[, .(nm = any(not_met)), by = .(id, row)]
+    cnt <- s[row != "Total", .(n = sum(not_met)), by = .(row)]
+    tot_bad <- s[row == "Total" & not_met, unique(id)]
+    worst <- utils::head(cnt[order(-n)][n > 0], 3)
+    open_js <- function(id) sprintf("Shiny.setInputValue('fct_open', '%s', {priority: 'event'})", id)
+    hdr <- tags$tr(tags$th(""), lapply(ids, function(i) tags$th(class = "t", title = tb[[i]]$title, onclick = open_js(i), i)), tags$th("Not met"))
+    body <- lapply(seq_len(nrow(rk)), function(j) { r <- rk$row[j]
+      cells <- lapply(ids, function(i) { v <- m[id == i & row == r]$nm
+        cl <- if (!length(v)) "na" else if (isTRUE(v)) "bad" else "ok"
+        tags$td(class = paste("c", cl), title = sprintf("%s - %s: %s", r, tb[[i]]$title, c(na = "no data", bad = "target not met", ok = "target met")[[cl]]), onclick = open_js(i),
+                if (cl == "bad") HTML("&#10007;") else "") })
+      nn <- sum(m[row == r]$nm)
+      tags$tr(class = if (r == "Total") "tot" else NULL, tags$td(class = "r", r), cells, tags$td(class = "n", nn)) })
+    tagList(
+      div(class = "fct-kpi",
+          div(tags$b(sprintf("%d / %d", sum(av), length(av))), "tables produced"),
+          div(class = if (length(tot_bad)) "r" else NULL, tags$b(length(tot_bad)), "tables with the target not met for the whole survey"),
+          div(class = if (sum(cnt$n > 0)) "r" else NULL, tags$b(sprintf("%d / %d", sum(cnt$n > 0), nrow(cnt))), sprintf("%s with a target not met", who)),
+          if (nrow(worst)) div(tags$b(style = "font-size:1em", paste(sprintf("%s (%d)", worst$row, worst$n), collapse = ", ")), sprintf("%s with the most targets not met", who))),
+      card(card_header(sprintf("Targets by table and %s", if (fc$rows == "interv") "interviewer" else "team"),
+                       tags$span(class = "small-note", style = "float:right", "Red = target not met, green = met, grey = no data. Click a table to open it.")),
+           div(style = "overflow-x:auto", tags$table(class = "fct-grid", tags$thead(hdr), tags$tbody(body))),
+           div(class = "small-note", style = "margin-top:6px", sprintf("Survey: %s. %s", fc$survey_label,
+               if (!is.null(fc$filters$from)) sprintf("Interviews from %s to %s.", format(as.Date(fc$filters$from), "%d %b %Y"), format(as.Date(fc$filters$to %||% Sys.Date()), "%d %b %Y")) else "Whole fieldwork to date."))),
+      na_list)
+  })
+
+  # one table: figures, targets not met in red, graphs
+  fct_cur <- reactive({ fc <- fct_res(); req(fc, input$fct_pick); fc$tables[[input$fct_pick]] })
+  fct_header <- function(cl, first) {
+    g <- cl$group
+    if (!any(nzchar(g))) return(tags$table(class = "display", tags$thead(tags$tr(tags$th(first), lapply(cl$label, tags$th)))))
+    r <- rle(g); row1 <- list(tags$th(rowspan = 2, first)); i <- 1
+    for (k in seq_along(r$values)) { n <- r$lengths[k]
+      if (nzchar(r$values[k])) row1[[length(row1) + 1]] <- tags$th(colspan = n, class = "dt-center", style = "background:#DCEFF8", r$values[k])
+      else for (j in i:(i + n - 1)) row1[[length(row1) + 1]] <- tags$th(rowspan = 2, cl$label[j])
+      i <- i + n }
+    tags$table(class = "display", tags$thead(tags$tr(row1), tags$tr(lapply(cl$label[nzchar(g)], tags$th))))
+  }
+  output$fct_tab_ui <- renderUI({
+    if (is.null(fct_data())) return(tags$p(class = "small-note", style = "margin-top:20px", "Read the data first (button on the left)."))
+    t <- fct_cur(); req(t); fc <- fct_res()
+    by <- if (fc$rows == "interv") "interviewer" else "interviewer team"
+    head <- div(class = "bf-card", tags$h4(style = "margin:0", t$title), div(class = "small-note", sprintf("%s, according to %s, %s.", t$subtitle, by, fc$survey_label)),
+                if (isTRUE(t$available)) div(style = "margin-top:8px", actionButton("fct_ai", tagList(icon("wand-magic-sparkles"), "Read with AI"), class = "btn-sm btn-outline-primary")))
+    if (!isTRUE(t$available)) return(tagList(head, div(class = "alert alert-secondary", icon("circle-info"), sprintf(" Not produced: it %s. The topic may not be in this survey's questionnaires.", t$why))))
+    nr <- nrow(t$data)
+    pl <- if (nr > 80) list(div(class = "small-note", "Graphs are drawn for up to 80 rows: choose teams on the left, or one row per team."))
+          else lapply(seq_along(t$plots), function(i) { k <- t$plots[[i]]$kind; h <- if (k == "profile") 300 else max(260, 19 * nr + 130)
+            card(renderPlot(ipm_fct_plot(t, i), height = h)) })
+    tagList(head, uiOutput("fct_ai_out"),
+            card(DT::DTOutput("fct_dt", height = "auto", fill = FALSE), if (!is.null(t$note)) div(class = "small-note", style = "margin-top:6px", icon("bullseye"), " ", t$note)),
+            if (length(pl) == 2) layout_columns(col_widths = c(6, 6), pl[[1]], pl[[2]]) else pl)
+  })
+  output$fct_dt <- DT::renderDT({
+    t <- fct_cur(); req(isTRUE(t$available)); x <- .int$fct_display(t); d <- as.data.frame(x$data, check.names = FALSE)
+    d[[1]] <- htmltools::htmlEscape(d[[1]])
+    for (j in seq_len(ncol(x$bad))) { b <- x$bad[, j]; if (any(b)) d[[j + 1]][b] <- sprintf("<span class='fct-bad'>%s</span>", d[[j + 1]][b]) }
+    DT::datatable(d, container = fct_header(x$cols, if (fct_res()$rows == "interv") "Interviewer" else "Team"), rownames = FALSE, escape = FALSE, fillContainer = FALSE,
+                  class = "compact stripe cell-border",
+                  options = list(dom = if (nrow(d) > 40) "tip" else "t", pageLength = 40, scrollX = TRUE, ordering = FALSE,
+                                 columnDefs = list(list(className = "dt-right", targets = seq_len(ncol(d) - 1))),
+                                 rowCallback = DT::JS("function(row, data) { if (data[0] === 'Total') $(row).addClass('fct-total'); }")))
+  })
+  observeEvent(input$fct_ai, {
+    t <- fct_cur(); req(isTRUE(t$available)); x <- .int$fct_display(t); d <- as.data.frame(x$data, check.names = FALSE)
+    names(d) <- c("Row", trimws(paste(ifelse(nzchar(x$cols$group), paste0(x$cols$group, ":"), ""), x$cols$label)))
+    nb <- apply(x$bad, 1, function(z) paste(names(d)[-1][z], collapse = "; ")); d$`Target not met in` <- nb
+    ai_read(paste0("fct:", t$id), t$title, list(table = d, note = t$note %||% ""),
+            "This is a MICS Field Check Table, produced during fieldwork to check data quality by team. Say which teams are far from the others or miss the target, what it may mean (e.g. members or births left out, ages moved out of the eligible range, documents not asked to be seen), and what supervisors should check or retrain.")
+  })
+  output$fct_ai_out <- renderUI({ t <- fct_cur(); req(t); read_box(paste0("fct:", t$id)) })
+
+  # performance overview: first and second half of each team's interviews
+  output$fct_ov <- renderUI({
+    if (is.null(fct_data())) return(tags$p(class = "small-note", style = "margin-top:20px", "Read the data first (button on the left)."))
+    fc <- fct_res(); req(fc); o <- fc$overview
+    if (is.null(o)) return(tags$p("No indicator could be computed."))
+    ind <- unique(o$indicator); nr <- length(unique(o$row))
+    tagList(div(class = "small-note", style = "margin-bottom:8px", "As in the MICS7 Performance overview: each team's interviews to date are split in two halves by date (not by days of fieldwork), to see whether the team improves or gets worse. Age ratios close to 1 are expected."),
+            div(class = "tp-head", selectInput("fct_ov_ind", NULL, ind, selected = if (isTRUE(isolate(input$fct_ov_ind) %in% ind)) isolate(input$fct_ov_ind) else ind[1], width = "420px")),
+            card(if (nr > 80) div(class = "small-note", "Graph drawn for up to 80 rows.") else plotOutput("fct_ov_plot", height = max(260, 19 * nr + 130))),
+            card(DT::DTOutput("fct_ov_dt", height = "auto", fill = FALSE)))
+  })
+  output$fct_ov_plot <- renderPlot({ fc <- fct_res(); req(fc, input$fct_ov_ind); .int$fct_ov_plot(fc, input$fct_ov_ind) })
+  output$fct_ov_dt <- DT::renderDT({
+    fc <- fct_res(); req(fc$overview); o <- fc$overview
+    w <- data.table::dcast(o, row + rkey ~ indicator, value.var = c("first", "second")); w <- w[order(row != "Total", rkey)]
+    ind <- unique(o$indicator); d <- data.frame(row = w$row, check.names = FALSE)
+    for (i in ind) for (h in c("first", "second")) d[[paste(h, i)]] <- round(w[[paste0(h, "_", i)]], 2)
+    cl <- data.table(name = names(d)[-1], label = rep(c("1st half", "2nd half"), length(ind)), group = rep(ind, each = 2))
+    DT::datatable(d, container = fct_header(cl, if (fc$rows == "interv") "Interviewer" else "Team"), rownames = FALSE, class = "compact stripe cell-border", fillContainer = FALSE,
+                  options = list(dom = if (nrow(d) > 40) "tip" else "t", pageLength = 40, scrollX = TRUE, ordering = FALSE,
+                                 rowCallback = DT::JS("function(row, data) { if (data[0] === 'Total') $(row).addClass('fct-total'); }")))
+  })
+
+  # parameters (targets)
+  output$fct_par_ui <- renderUI({
+    p <- fct_par(); f <- fct_data(); cfg <- isolate(ex_cfg())
+    det <- if (!is.null(f$fd$meta$hh$vallab$HH6)) { vl <- f$fd$meta$hh$vallab$HH6; paste(sprintf("%s = %s", unname(vl), names(vl)), collapse = ", ") } else NULL
+    num <- function(n, lab = FSPEC[[n]]$label) { s <- FSPEC[[n]]; v <- p[[n]]
+      numericInput(paste0("fp_", n), lab, value = if (is.null(v) || all(is.na(v))) NA else v, min = s$min, max = s$max, step = s$step, width = "100%") }
+    pair <- function(a, lab) tagList(tags$b(style = "font-size:0.9em", lab), layout_columns(col_widths = c(6, 6), num(paste0(a, "_u"), "Urban"), num(paste0(a, "_r"), "Rural")))
+    tagList(
+      div(class = "small-note", style = "margin-bottom:10px", "The targets of 'targets.sps' and of the MICS7 table syntaxes. Set the expected numbers of eligible members from the previous survey or census. 'Apply' updates the tables; 'Apply and remember' also keeps them with the settings of this survey for the next data export."),
+      layout_columns(col_widths = c(4, 4, 4),
+        card(card_header("Survey and area"),
+             textInput("fp_survey_label", "Survey name and year in the titles", p$survey_label, placeholder = cfg$survey_name %||% "e.g. Madagascar MICS7, 2025", width = "100%"),
+             textInput("fp_urban", "Codes of HH6 (area) for urban", p$urban, placeholder = "from the value labels", width = "100%"),
+             textInput("fp_rural", "Codes of HH6 for rural", p$rural, placeholder = "from the value labels", width = "100%"),
+             div(class = "small-note", "Empty: read from the value labels of HH6", if (!is.null(det)) sprintf(" (in this data: %s)", det), ". Several codes with spaces, e.g. '1 2' for urban and '3 4' for rural when HH6 has 4 categories (as in targets.sps).")),
+        card(card_header("Eligible members per household (F2)"),
+             pair("t2w", "Women 15-49"), pair("t2m", "Men 15-49 (selected households)"), pair("t2c", "Children under 5"), pair("t2a", "Children 5-17"), num("elig_share")),
+        card(card_header("Ages and dates of birth (F4, F5, F6, F11)"), num("t5w"), num("t5m"), num("t5u"), num("t5c"), num("age_int"), num("dob"))),
+      card(card_header("Other targets"), layout_columns(col_widths = c(4, 4, 4), tagList(num("ceb_prev"), num("ceb_share")), tagList(num("seen"), num("heap")), tagList(num("death12"), num("mm_missing"), num("bh_first_year")))),
+      div(style = "display:flex; gap:10px; flex-wrap:wrap; margin-top:6px",
+          actionButton("fct_apply", tagList(icon("check"), " Apply"), class = "btn-primary"),
+          actionButton("fct_save", tagList(icon("floppy-disk"), " Apply and remember with the survey settings"), class = "btn-outline-primary"),
+          actionButton("fct_reset", "Back to the MICS7 defaults", class = "btn-outline-secondary")))
+  })
+  fct_read_par <- function() {
+    p <- fct_par()
+    for (n in names(FSPEC)) { v <- input[[paste0("fp_", n)]]; if (!is.null(v)) p[[n]] <- if (is.na(v)) (if (n == "bh_first_year") NA else p[[n]]) else v }
+    for (n in c("survey_label", "urban", "rural")) { v <- input[[paste0("fp_", n)]]; if (!is.null(v)) p[[n]] <- trimws(v) }
+    p
+  }
+  observeEvent(input$fct_apply, { fct_par(fct_read_par()); showNotification("Parameters applied to the tables.", type = "message", duration = 3) })
+  observeEvent(input$fct_save, {
+    p <- fct_read_par(); fct_par(p); fct_keep(p)
+    f <- if (!is.null(rv$cfg)) tryCatch(ipm_settings_save(collect_cfg()), error = function(e) NULL)
+    showNotification(if (is.null(f)) "Parameters applied. They are remembered with the survey settings once the survey has a name (Setup) - and with the next run."
+                     else "Parameters applied and remembered with the settings of this survey.", type = "message", duration = 6)
+  })
+  observeEvent(input$fct_reset, { fct_par(ipm_fct_defaults()); showNotification("MICS7 default targets applied (not remembered until you click 'Apply and remember').", type = "message", duration = 5) })
+  output$fct_dl <- downloadHandler(filename = function() sprintf("MICS7_field_check_tables_%s.xlsx", format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { fc <- fct_res(); req(fc); ipm_fct_xlsx(fc, f) })
 
   # ---------- downloads ----------
   # the parts of the report to include (all ticked by default)
