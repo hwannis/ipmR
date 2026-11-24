@@ -385,7 +385,9 @@ ipm_ui <- page_navbar(
   nav_panel(tagList(icon("table-cells"), "Questionnaire"), value = "quest",
     div(class = "tp-head", radioButtons("qh_by", NULL, c("Questions" = "question", "Modules" = "module"), inline = TRUE),
         selectInput("qh_top", NULL, c("20 with the most flags" = 20, "40 with the most flags" = 40, "80 with the most flags" = 80), selected = 40, width = "220px"),
-        checkboxInput("qh_hide", "Hide those flagged in most teams (questionnaire problems)", FALSE)),
+        checkboxInput("qh_hide", "Hide those flagged in most teams (questionnaire problems)", FALSE),
+        div(style = "margin-left:auto", downloadButton("qh_html", "Flag summary to share (HTML)", class = "btn-sm btn-outline-primary"),
+            downloadButton("qh_xlsx", "Question and module flags (Excel)", class = "btn-sm btn-outline-primary"))),
     uiOutput("qh_body")),
   nav_panel(tagList(icon("clipboard-check"), "Field check tables"), value = "fct",
     layout_sidebar(fillable = FALSE, border = FALSE,
@@ -1531,6 +1533,10 @@ ipm_server <- function(input, output, session) {
   })
 
   # ---------- questionnaire page ----------
+  output$qh_html <- downloadHandler(filename = function() sprintf("question_module_flags_%s.html", format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { req(rv$sc, rv$res); ipm_question_html(rv$res, rv$sc, f, top = as.integer(input$qh_top %||% 40)) })
+  output$qh_xlsx <- downloadHandler(filename = function() sprintf("question_module_flags_%s.xlsx", format(Sys.Date(), "%Y%m%d")),
+    content = function(f) { req(rv$sc, rv$res); ipm_question_xlsx(rv$res, rv$sc, f) })
   heat <- reactive({ req(rv$sc, rv$res); ipm_question_heat(rv$res, rv$sc, by = input$qh_by %||% "question", top = as.integer(input$qh_top %||% 40), hide_survey_wide = isTRUE(input$qh_hide)) })
   heat_col <- function(r) { if (is.na(r)) return("transparent"); if (r == 0) return("var(--heat0)")
     x <- min(r / 40, 1); grDevices::rgb(grDevices::colorRamp(c("#FDE3C8", "#F28C28", "#B3140F"))(x), maxColorValue = 255) }

@@ -46,6 +46,32 @@ test_that("the questionnaire heat map has one row per question and one cell per 
   expect_null(ipm_question_heat(list(outputs = list()), sc))
 })
 
+test_that("the question and module flag summaries download as Excel and as one HTML page", {
+  ft <- data.table::CJ(dataset = "hh", varname = c("Q1", "Q2", "Q3"), team = 1:4, interv = 1:2)
+  ft[, `:=`(module = "HC*", vardesc = paste("label", varname), interv = team * 10 + interv)]
+  ft[, flag := as.integer((varname == "Q1") | (varname == "Q2" & team == 2 & interv == 21))]
+  r <- list(cfg = list(survey_name = "Synthetic é"), outputs = list(flaganal = list(tests = ft)))
+  sc <- list(teams = data.table::data.table(team = 1:4, team_label = paste0("T", 1:4, " (", 1:4, "01)"), priority = c("High", "Low", "Low", "Medium")),
+             questions = data.table::data.table(dataset = "hh", question = c("Q1", "Q2", "Q3"), survey_wide = c(TRUE, FALSE, FALSE)),
+             survey = list(period = "01 Jan - 14 Jan 2026", flag_rate = 3.2),
+             signals = data.table::data.table(level = "survey", dataset = "hh", module = "HC", question = "Q1", severity = "high",
+                                              headline = "Q1 flagged in 4 of 4 teams", evidence = "Q1", action = "Check the wording", owner = "Survey coordinator", timing = "this week"))
+  f <- tempfile(fileext = ".xlsx"); ipm_question_xlsx(r, sc, f)
+  expect_equal(openxlsx::getSheetNames(f), c("Questions", "Modules", "By team", "Questionnaire problems"))
+  q <- openxlsx::read.xlsx(f, "Questions", startRow = 5, sep.names = " ")
+  expect_equal(q$Question, c("Q1", "Q2")); expect_equal(q$`Flagged in most teams`, c("yes", ""))
+  expect_equal(q$T2, c(100, 50)); expect_equal(q$T1[2], 0)                                 # team columns: % flagged
+  b <- openxlsx::read.xlsx(f, "By team", startRow = 4, sep.names = " ")
+  expect_equal(b[b$Question == "Q2", "Interviewers flagged"], "21")
+  expect_equal(openxlsx::read.xlsx(f, "Questionnaire problems", startRow = 4)$Action, "Check the wording")
+  h <- tempfile(fileext = ".html"); ipm_question_html(r, sc, h)
+  x <- paste(readLines(h, encoding = "UTF-8"), collapse = "\n")
+  expect_match(x, "<style>", fixed = TRUE); expect_match(x, "Synthetic é", fixed = TRUE)
+  expect_match(x, "Flagged modules by team", fixed = TRUE); expect_match(x, "Questionnaire problems (1)", fixed = TRUE)
+  expect_match(x, "1 of 2 tests flagged; interviewers 21", fixed = TRUE)
+  expect_null(ipm_question_xlsx(list(outputs = list()), sc))
+})
+
 test_that("the shareable briefing is one self-contained UTF-8 page with the teams and the follow-up", {
   dir <- tempfile("act"); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
   r <- act_res(short = 11:13); sc <- ipm_scorecard(r); cmp <- ipm_history_update(r, sc, dir, save = TRUE)
