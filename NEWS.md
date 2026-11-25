@@ -1,3 +1,8 @@
+# ipmR (development version)
+
+**Field check tables (0.9.0.9001)**
+* F8Q: the blank test columns count only the households selected for the blank test - E. coli detected, E. coli not detected, households selected for blank testing and % of blank tests with E. coli; the "Test not conducted" column (households not selected) is removed, as in the MICS7 table (#85).
+
 # ipmR 0.9.0
 
 Two new pages and a simpler setup: the MICS7 Field Check Tables produced in the app by team or interviewer, a Data explorer to look at any variable, a setup in three steps with all analysis settings in one panel and remembered per survey, a report built by parts, and the question and module flag summaries to share.

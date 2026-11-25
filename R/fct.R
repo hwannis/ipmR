@@ -512,12 +512,12 @@ fct_build <- list(
       ss <- rep(2, nrow(s)); if (has(s, "WQ19")) ss[is1(s$WQ19)] <- 1; if (has(s, "WQ18")) ss[!is.na(s$WQ18) & s$WQ18 != 1] <- 3
       bl <- if (has(s, "WQ20")) is1(s$WQ20) else rep(FALSE, nrow(s)); ec <- if (has(s, "WQ29")) !is.na(s$WQ29) & s$WQ29 > 0 else rep(FALSE, nrow(s))
       list(obs = p100(lt(s$WQ12, 4)), nobs = p100(!lt(s$WQ12, 4)), col = p100(ss == 1), ncol = p100(ss == 2), nsh = p100(ss == 3), n = nrow(s),
-           bdet = sum(bl & ec), bnot = sum(bl & !ec), bno = sum(!bl), bn = sum(bl), bpct = if (any(bl)) 100 * sum(bl & ec) / sum(bl) else NA_real_)
+           bdet = sum(bl & ec), bnot = sum(bl & !ec), bn = sum(bl), bpct = if (any(bl)) 100 * sum(bl & ec) / sum(bl) else NA_real_)
     })
     fct_tab("F8Q", d, rbind(cols_dt(c("obs", "nobs"), c("Source observed", "Unable to observe source"), "pct", "Household sample"),
                             cols_dt(c("col", "ncol", "nsh"), c("Shown: collected", "Shown: not collected", "Not shown"), "pct", "Source sample"),
                             cols_dt("n", "Households selected for water quality testing", "n"),
-                            cols_dt(c("bdet", "bnot", "bno", "bn", "bpct"), c("E. coli detected", "E. coli not detected", "Test not conducted", "Households selected for blank testing", "% of blank tests with E. coli"), c("n", "n", "n", "n", "pct"), "Blank test")),
+                            cols_dt(c("bdet", "bnot", "bn", "bpct"), c("E. coli detected", "E. coli not detected", "Households selected for blank testing", "% of blank tests with E. coli"), c("n", "n", "n", "pct"), "Blank test")),   # households not selected for the blank test are not counted (#85)
             plots = list(list(kind = "stack", cols = c("col", "ncol", "nsh")), list(kind = "bars", cols = "bpct", title = "Blank tests with E. coli detected (%)")),
             note = "Blank tests should never detect E. coli: a team with E. coli in blank tests has a contamination problem in its testing.")
   },
