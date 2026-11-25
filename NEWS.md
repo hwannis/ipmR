@@ -1,5 +1,11 @@
 # ipmR (development version)
 
+**Loading the data (0.9.0.9002)**
+* **What was found** now says what each file is, recognised from its content (household questionnaire, household members, women, birth history, maternal mortality ...) and what it is linked to, and lists the usual MICS7 files not loaded with what is lost without them (e.g. "bh.sav (birth history): without it, no children ever born, birth history and under-5 deaths (F10, F11)"); files that are only used in some surveys (tn, fg, mm, mn) are listed apart (#86).
+* Only a linked file uploaded (e.g. bh.sav alone): instead of "No MICS questionnaire detected", the app says what the file is and what to add ("bh.sav is the birth history. Add wm.sav (women's questionnaire) and hh.sav (household questionnaire) ..."). A linked file whose questionnaire is missing (bh.sav without wm.sav) is flagged (#86).
+* The same questionnaire uploaded twice (hh.sav and "hh (1).sav", hh.sav and an older hh export, hh.sav and hh.dta): one is used - the one with the latest interview, then the most records, then the plain name - and the other is listed as ignored, with why. Before, both were read (#86).
+* Dropping more files now adds them to those already loaded (a file with the same name is replaced), so a missing file can be added afterwards; **Clear the data** starts again with a new export. Before, each drop replaced all the files (#86).
+
 **Field check tables (0.9.0.9001)**
 * F8Q: the blank test columns count only the households selected for the blank test - E. coli detected, E. coli not detected, households selected for blank testing and % of blank tests with E. coli; the "Test not conducted" column (households not selected) is removed, as in the MICS7 table (#85).
 

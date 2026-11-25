@@ -111,6 +111,7 @@ read_config <- function(path) {
 #' @export
 write_config <- function(cfg, path) {
   cfg$options <- cfg$options[!vapply(cfg$options, is.null, logical(1))]
+  cfg$inventory <- NULL                                  # what was uploaded this time: not a setting
   yaml::write_yaml(cfg, path)
   invisible(path)
 }
@@ -357,17 +358,24 @@ panel_admin_vars <- function(q, vars, lab) {
 mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_dir)), files = NULL) {
   files <- files %||% list.files(data_dir, pattern = "\\.(sav|dta)$", ignore.case = TRUE)
   if (!length(files)) stop("No .sav or .dta files found in ", data_dir)
-  meta <- list()
+  meta0 <- list()
   for (f in files) {
-    nm <- make.names(tolower(tools::file_path_sans_ext(f)))
     x <- tryCatch(read_any(file.path(data_dir, f), n_max = 50), error = function(e) stop(f, ": ", conditionMessage(e), call. = FALSE))
     names(x) <- toupper(names(x))
     lab <- vapply(x, var_attr1, character(1), which = "label")
-    meta[[nm]] <- list(file = f, vars = names(x), lab = lab, vallab = lapply(x, function(v) attr(v, "labels")))
+    meta0[[f]] <- list(file = f, vars = names(x), lab = lab, vallab = lapply(x, function(v) attr(v, "labels")))
   }
+  q0 <- lapply(meta0, detect_questionnaire)
+  kind0 <- vapply(files, function(f) mics_file_kind(meta0[[f]], q0[[f]]), character(1))
+  dup <- mics_dedupe(data_dir, meta0, q0, kind0)                   # the same questionnaire uploaded twice: keep one (#86)
+  keep <- setdiff(files, vapply(dup, `[[`, "", "file"))
+  nms <- make.unique(make.names(tolower(base_name(keep))))   # "hh (1).sav" (a browser copy) is hh
+  meta <- stats::setNames(meta0[keep], nms); kind <- stats::setNames(kind0[keep], nms)
+  qs <- stats::setNames(q0[keep], nms)
+  if (!any(!vapply(qs, is.null, logical(1)))) stop(mics_no_questionnaire_msg(kind, meta), call. = FALSE)
   ds <- list(); qinfo <- list()
   for (nm in names(meta)) {
-    q <- detect_questionnaire(meta[[nm]])
+    q <- qs[[nm]]
     d <- list(file = meta[[nm]]$file)
     if (!is.null(q)) { qinfo[[nm]] <- q; d[c("interviewer", "result", "day", "start_hour", "end_hour", "supervisor")] <- q[c("interviewer", "result", "day", "start_hour", "end_hour", "supervisor")] }
     ds[[nm]] <- d
@@ -483,7 +491,97 @@ mics_autoconfig <- function(data_dir, survey_name = basename(normalizePath(data_
   if (is.null(extras$ant)) { cfg$outputs$ant_heap <- FALSE; cfg$outputs$ant_oor <- FALSE }
   else if (!length(extras$ant$flags)) cfg$outputs$ant_oor <- FALSE
   if (is.null(extras$fl)) cfg$outputs$fl <- FALSE
+  cfg$inventory <- mics_inventory(ds, kind, dup)
   normalise_config(cfg)
+}
+
+# ---- What each uploaded file is, duplicates, missing files (#86) ----
+# The usual MICS7 data files: what each one is, the questionnaire it is linked to, and what is lost without it
+mics_kinds <- list(
+  hh = list(label = "Household questionnaire", parent = NULL, core = TRUE,
+            lost = "household interviews, teams and interview dates, and the files linked to it (hl, tn): most outputs"),
+  hl = list(label = "Household members (list)", parent = "hh", core = TRUE,
+            lost = "household members by age and sex: members listed, eligible members per household and age distribution"),
+  tn = list(label = "Mosquito nets", parent = "hh", core = FALSE, lost = "mosquito nets"),
+  wm = list(label = "Women's questionnaire", parent = NULL, core = TRUE,
+            lost = "women's interviews, and the interviewer and date of the files linked to it (bh, fg, mm)"),
+  bh = list(label = "Birth history", parent = "wm", core = TRUE, lost = "children ever born, birth history and under-5 deaths (F10, F11)"),
+  fg = list(label = "Female genital mutilation (daughters)", parent = "wm", core = FALSE, lost = "FGM of daughters"),
+  mm = list(label = "Maternal mortality (siblings)", parent = "wm", core = FALSE, lost = "maternal mortality (F12)"),
+  mn = list(label = "Men's questionnaire", parent = NULL, core = FALSE, lost = "men's interviews"),
+  ch = list(label = "Children under 5 questionnaire", parent = NULL, core = TRUE, lost = "under-5 interviews and anthropometry (F9)"),
+  fs = list(label = "Children 5-17 questionnaire", parent = NULL, core = TRUE, lost = "5-17 interviews and foundational learning")
+)
+base_name <- function(f) sub("[[:space:]]*[(][0-9]+[)]$", "", tools::file_path_sans_ext(f))   # "hh (1).sav" (a second download) is hh
+kind_label <- function(k) if (!is.null(mics_kinds[[k]])) mics_kinds[[k]]$label else if (k == "other") "Other file" else paste0("Questionnaire (", toupper(k), ")")
+
+# kind of a file from its content (not its name): questionnaire panel, else the variables of the linked MICS files
+mics_file_kind <- function(m, q = NULL) {
+  if (!is.null(q)) { k <- unname(c(HH = "hh", WM = "wm", MWM = "mn", UF = "ch", FS = "fs")[q$panel]); return(if (is.na(k)) tolower(q$panel) else k) }
+  v <- m$vars
+  if ("BH5" %in% v || "BH4Y" %in% v) return("bh")
+  if (all(c("HL1", "HL4", "HL6") %in% v)) return("hl")
+  if (any(grepl("^MM[0-9]", v))) return("mm")
+  if (any(grepl("^FG[0-9]", v))) return("fg")
+  if (any(grepl("^TN[0-9]", v))) return("tn")
+  "other"
+}
+
+# Files that are the same questionnaire (hh.sav and "hh (1).sav", hh.sav and hh.dta): keep the one with the latest
+# interview, then the most records; the others are listed with the reason
+mics_dedupe <- function(data_dir, meta, q, kind) {
+  key <- ifelse(kind == "other", make.names(tolower(base_name(names(kind)))), kind)
+  out <- list()
+  for (k in unique(key[duplicated(key)])) {
+    fs <- names(kind)[key == k]
+    st <- lapply(fs, function(f) {
+      m <- meta[[f]]; n <- tryCatch(nrow(read_any_cols(file.path(data_dir, f), m$vars[1])), error = function(e) NA_integer_); last <- as.Date(NA)
+      i <- if (!is.null(q[[f]])) match(q[[f]]$day, m$vars) else NA
+      if (!is.na(i) && i + 2 <= length(m$vars)) {
+        x <- tryCatch(read_any_cols(file.path(data_dir, f), m$vars[i:(i + 2)]), error = function(e) NULL)
+        if (!is.null(x) && ncol(x) == 3) { d <- as.Date(ymd_date(x[[3]], x[[2]], x[[1]])); if (any(!is.na(d))) last <- max(d, na.rm = TRUE) }
+      }
+      list(n = n, last = last)
+    })
+    last <- do.call(c, lapply(st, `[[`, "last")); n <- vapply(st, `[[`, 0L, "n")
+    o <- order(-as.numeric(last), -n, nchar(fs), fs, na.last = TRUE); w <- fs[o[1]]      # same data: the plain name (hh.sav before "hh (1).sav")
+    desc <- function(j) paste(c(if (!is.na(last[j])) paste("last interview", format(last[j], "%d %b %Y")), if (!is.na(n[j])) paste(format(n[j], big.mark = ","), "records")), collapse = ", ")
+    for (j in o[-1]) out[[length(out) + 1]] <- list(file = fs[j], kind = kind[[fs[j]]], kept = w,
+      reason = if (identical(desc(j), desc(o[1]))) sprintf("%s is a second copy of %s (%s, %s): %s was used.", fs[j], w, kind_label(kind[[w]]), desc(o[1]), w)
+               else sprintf("%s and %s are both the %s: %s was used (%s); %s was ignored (%s).", w, fs[j], tolower(kind_label(kind[[w]])), w, desc(o[1]), fs[j], desc(j)))
+  }
+  out
+}
+
+# Message when no questionnaire was uploaded (e.g. only bh.sav): what each file is and what to add
+mics_no_questionnaire_msg <- function(kind, meta) {
+  what <- vapply(names(kind), function(nm) sprintf("%s is the %s", meta[[nm]]$file, tolower(kind_label(kind[[nm]]))), "")
+  need <- unique(unlist(lapply(kind, function(k) mics_kinds[[k]]$parent)))
+  need <- unique(c(need, if ("wm" %in% need) "hh"))
+  add <- if (length(need)) paste0("Add ", paste(vapply(need, function(k) sprintf("%s.sav (%s)", k, tolower(mics_kinds[[k]]$label)), ""), collapse = " and "),
+                                  ": the interviewer, team and interview date come from the questionnaire. ")
+         else "Add the questionnaire files (hh.sav, wm.sav, ch.sav, fs.sav ...). "
+  paste0("No questionnaire among the files: ", paste(what, collapse = "; "), ". ", add,
+         "The files already loaded are kept: drop the missing ones to add them.")
+}
+
+# Inventory for the app: one row per file used, duplicates ignored, usual files missing, notes on links
+mics_inventory <- function(ds, kind, dup) {
+  files <- lapply(names(ds), function(nm) { d <- ds[[nm]]
+    list(file = d$file, dataset = nm, kind = kind[[nm]], label = kind_label(kind[[nm]]),
+         use = if (!is.null(d$result)) "questionnaire" else if (!is.null(d$parent)) paste("linked to", ds[[d$parent]]$file) else "not used") })
+  notes <- character()
+  for (nm in names(ds)) {
+    d <- ds[[nm]]; exp <- mics_kinds[[kind[[nm]]]]$parent
+    if (!is.null(d$result)) next
+    if (is.null(d$parent)) notes <- c(notes, sprintf("%s (%s) is not used: no questionnaire it can be linked to%s.", d$file, tolower(kind_label(kind[[nm]])),
+                                                      if (!is.null(exp)) sprintf(" - add %s.sav (%s)", exp, tolower(mics_kinds[[exp]]$label)) else ""))
+    else if (!is.null(exp) && !exp %in% kind) notes <- c(notes, sprintf("%s (%s) belongs to %s.sav (%s), which is not loaded: it is linked to %s instead, so its interviewer and date are those of that questionnaire.",
+                                                                         d$file, tolower(kind_label(kind[[nm]])), exp, tolower(mics_kinds[[exp]]$label), ds[[d$parent]]$file))
+  }
+  miss <- setdiff(names(mics_kinds), kind)
+  list(files = files, duplicates = dup, notes = notes,
+       missing = lapply(miss, function(k) list(kind = k, file = paste0(k, ".sav"), label = mics_kinds[[k]]$label, core = mics_kinds[[k]]$core, lost = mics_kinds[[k]]$lost)))
 }
 
 #' @rdname mics_autoconfig

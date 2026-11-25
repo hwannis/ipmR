@@ -456,6 +456,9 @@ ipm_ui <- page_navbar(
             layout_columns(col_widths = c(5, 7),
               card(card_header("Load the survey data"),
                 data_drop("up_data"),
+                div(class = "small-note", style = "margin-top:6px; display:flex; gap:8px; align-items:center",
+                    span("Dropping more files adds them to those loaded (a file with the same name is replaced)."),
+                    actionButton("data_clear", tagList(icon("eraser"), " Clear the data"), class = "btn-outline-secondary btn-sm", style = "margin-left:auto; white-space:nowrap")),
                 if (LOCAL_MODE) tags$details(style = "margin-top:6px; font-size:0.9em",
                   tags$summary("Very large files on this computer or a network drive? Read them where they are"),
                   div(style = "margin-top:8px", textInput("data_dir", NULL, value = getOption("ipmR.data_dir", ""), width = "100%", placeholder = "e.g. Z:/MICS/Somalia/21 Oct"),
@@ -464,7 +467,7 @@ ipm_ui <- page_navbar(
                   div(class = "small-note", sprintf("Files are processed only within your own session and are never shared with other users. Name and other free-text variables are removed when the files are read. All uploaded files, results and reports are deleted from the server when you close the browser tab, after %s minutes of inactivity, or immediately with the button below. Do not upload data you are not authorised to process on this server.", format(IDLE_MINUTES)),
                       div(style = "margin-top:8px", actionButton("wipe", "Delete my data now", class = "btn-outline-danger btn-sm"))))),
               card(card_header("What was found"), uiOutput("found_ui"), uiOutput("name_box"),
-                   tags$details(class = "su-files", tags$summary("Files found"), tableOutput("found_tbl"))))),
+                   tags$details(class = "su-files", tags$summary("Files found and what each one is"), tableOutput("found_tbl"))))),
           # ---- step 2: review ----
           nav_panel_hidden("s_review",
             explain("Everything below was filled in from the data. Each part shows what was set and whether it needs a look: only the parts marked 'check' are open.",
@@ -747,7 +750,8 @@ ipm_server <- function(input, output, session) {
     on.exit(wipe(unique(dirname(paths))), add = TRUE)   # remove Shiny's temporary upload copies immediately
     upload_dirs <<- unique(c(upload_dirs, dirname(paths)))
     dir.create(sdir, recursive = TRUE, showWarnings = FALSE)
-    ddir <- file.path(sdir, "data"); unlink(ddir, recursive = TRUE); dir.create(ddir)
+    ddir <- file.path(sdir, "data"); dir.create(ddir, showWarnings = FALSE)   # a new drop adds to the files already loaded; same name = replaced (#86)
+    before <- list.files(ddir, pattern = "\\.(sav|dta)$", ignore.case = TRUE)
     for (i in seq_along(paths)) {
       if (grepl("\\.zip$", names[i], ignore.case = TRUE)) {
         ex <- file.path(sdir, "unz"); unlink(ex, recursive = TRUE); utils::unzip(paths[i], exdir = ex)
@@ -755,14 +759,29 @@ ipm_server <- function(input, output, session) {
         file.copy(fs, file.path(ddir, basename(fs)), overwrite = TRUE); unlink(ex, recursive = TRUE)
       } else if (grepl("\\.(sav|dta)$", names[i], ignore.case = TRUE)) file.copy(paths[i], file.path(ddir, names[i]), overwrite = TRUE)
     }
+    now <- list.files(ddir, pattern = "\\.(sav|dta)$", ignore.case = TRUE)
+    if (length(before) && length(now)) {
+      new <- length(setdiff(now, before)); rep <- length(intersect(before, basename(names[grepl("\\.(sav|dta)$", names, ignore.case = TRUE)])))
+      showNotification(sprintf("%d file(s) added%s to the %d already loaded. Use \"Clear the data\" to start again with a new export.", new,
+                               if (rep) sprintf(", %d replaced", rep) else "", length(before)), type = "message", duration = 8)
+    }
     configure(ddir)
   }
+  observeEvent(input$data_clear, {
+    unlink(file.path(sdir, "data"), recursive = TRUE)
+    rv$cfg <- NULL; rv$light <- NULL; rv$load_error <- NULL; rv$n_files <- 0
+    showNotification("The data files were removed. Drop the new export on the box.", type = "message")
+  })
   configure <- function(ddir) {
     n <- length(list.files(ddir, pattern = "\\.(sav|dta)$", ignore.case = TRUE))
     if (!n) { showNotification("No .sav or .dta file found in what was uploaded.", type = "error"); return() }
     withProgress(message = "Reading and recognising the datasets...", value = 0.3, {
-      cfg <- tryCatch(mics_autoconfig(ddir), error = function(e) { showNotification(conditionMessage(e), type = "error", duration = NULL); NULL })
+      cfg <- tryCatch(mics_autoconfig(ddir), error = function(e) {
+        rv$cfg <- NULL; rv$light <- NULL; rv$n_files <- n
+        rv$load_error <- list(msg = conditionMessage(e), files = list.files(ddir, pattern = "\\.(sav|dta)$", ignore.case = TRUE))
+        showNotification(conditionMessage(e), type = "error", duration = 20); NULL })
       req(cfg)
+      rv$load_error <- NULL
       cfg$results_dir <- file.path(sdir, "results"); cfg$options$drop_long_strings <- TRUE; cfg$options$fig_dpi <- 120
       cfg$survey_name <- ""
       apply_cfg(cfg, keep_paths = TRUE)
@@ -803,7 +822,7 @@ ipm_server <- function(input, output, session) {
   use_settings <- function(cfg, what) {          # settings from a file or remembered: datasets of this export only, its dates
     keep <- intersect(names(cfg$datasets), names(rv$cfg$datasets))
     if (!length(keep)) { showNotification(sprintf("The %s do not match the uploaded datasets.", what), type = "error"); return(FALSE) }
-    cfg$datasets <- cfg$datasets[keep]; cfg$fieldwork <- rv$cfg$fieldwork
+    cfg$datasets <- cfg$datasets[keep]; cfg$fieldwork <- rv$cfg$fieldwork; cfg$inventory <- rv$cfg$inventory
     if (is.null(cfg$period$start)) cfg$period$start <- rv$cfg$period$start
     cfg$saved <- NULL; cfg$ipmR_version <- NULL
     apply_cfg(cfg); TRUE
@@ -844,10 +863,27 @@ ipm_server <- function(input, output, session) {
   observeEvent(input$go_review, go_step("s_review"))
   observeEvent(input$survey_name_d, if (!identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name", value = input$survey_name_d))
   observeEvent(input$survey_name, if (!is.null(input$survey_name_d) && !identical(input$survey_name_d, input$survey_name)) updateTextInput(session, "survey_name_d", value = input$survey_name))
+  inventory_ui <- function(inv) {                # duplicates, files not linked, usual MICS files not loaded (#86)
+    if (is.null(inv)) return(NULL)
+    warn <- function(title, items) if (length(items)) div(class = "alert alert-warning", style = "font-size:0.88em; padding:8px 12px; margin:8px 0",
+      tags$b(icon("triangle-exclamation"), " ", title), tags$ul(style = "margin:4px 0 0 0; padding-left:18px", lapply(items, tags$li)))
+    miss <- inv$missing; core <- Filter(function(m) isTRUE(m$core), miss); opt <- Filter(function(m) !isTRUE(m$core), miss)
+    tagList(
+      warn("Same questionnaire uploaded twice", vapply(inv$duplicates, `[[`, "", "reason")),
+      warn("Files not linked as expected", inv$notes),
+      warn("Usual MICS files not loaded", lapply(core, function(m) tagList(tags$b(m$file), sprintf(" (%s): without it, no %s.", m$label, m$lost)))),
+      if (length(opt)) tags$p(class = "small-note", style = "margin:4px 0",
+        sprintf("Not loaded, if your survey has them: %s.", paste(vapply(opt, function(m) sprintf("%s (%s)", m$file, tolower(m$label)), ""), collapse = ", "))))
+  }
   output$found_ui <- renderUI({
-    cfg <- cur_cfg()
+    le <- rv$load_error
+    cfg <- if (is.null(rv$cfg)) NULL else cur_cfg()      # cur_cfg() stops (req) when no data is loaded: the message would not show
+    if (is.null(cfg) && !is.null(le)) return(div(
+      div(class = "alert alert-warning", style = "font-size:0.9em", icon("triangle-exclamation"), " ", le$msg),
+      tags$p(class = "small-note", sprintf("Files loaded so far: %s.", paste(le$files, collapse = ", ")))))
     if (is.null(cfg)) return(tags$p(class = "small-note", "No data loaded yet: drop the data export on the box."))
     q <- names(cfg$datasets)[vapply(cfg$datasets, function(d) !is.null(d$result), logical(1))]
+    inv <- rv$cfg$inventory
     st <- tryCatch(setup_status(), error = function(e) NULL)
     if (is.null(st)) return(tags$p(class = "small-note", icon("spinner", class = "fa-spin"), " Checking the settings..."))
     li <- function(ok, txt) tags$li(if (isTRUE(ok)) icon("circle-check", class = "su-ok") else icon("triangle-exclamation", class = "su-wn"), txt)
@@ -859,6 +895,7 @@ ipm_server <- function(input, output, session) {
                   if (!is.null(cfg$fieldwork) && cfg$fieldwork$days <= 21) "the whole fieldwork so far" else "the last 3 weeks")),
           li(st$outputs$status == "ok", st$outputs$text),
           if (!isTRUE(st$period$named)) li(FALSE, "Type the name of the survey below")),
+        inventory_ui(inv),
         if (length(cfg$fieldwork$by_questionnaire) > 1) tags$details(class = "su-files", tags$summary("Interview dates per questionnaire"),
           tags$table(class = "table table-sm", style = "width:auto; font-size:0.85em",
             tags$tr(tags$th("Questionnaire"), tags$th("First interview"), tags$th("Last interview"), tags$th("Records")),
@@ -890,8 +927,10 @@ ipm_server <- function(input, output, session) {
   cur_cfg <- reactive({ req(rv$cfg); tryCatch(collect_cfg(), error = function(e) rv$cfg) })   # settings as currently edited
   output$found_tbl <- renderTable({
     cfg <- cur_cfg(); req(cfg)
+    fl <- rv$cfg$inventory$files %||% list()
+    what <- stats::setNames(vapply(fl, `[[`, "", "label"), vapply(fl, `[[`, "", "file"))
     rbindlist(lapply(names(cfg$datasets), function(n) { d <- cfg$datasets[[n]]
-      data.table(file = d$file, type = if (!is.null(d$result)) "questionnaire" else if (!is.null(d$parent)) paste("linked to", d$parent) else "not used",
+      data.table(file = d$file, `what it is` = if (is.na(what[d$file])) "" else what[[d$file]], type =if (!is.null(d$result)) "questionnaire" else if (!is.null(d$parent)) paste("linked to", d$parent) else "not used",
                  interviewer = d$interviewer %||% (if (!is.null(d$parent)) sprintf("from %s: %s", d$parent, cfg$datasets[[d$parent]]$interviewer %||% "?") else ""),
                  result = d$result %||% "", date = d$day %||% (if (!is.null(d$parent)) sprintf("from %s: %s", d$parent, cfg$datasets[[d$parent]]$day %||% "?") else ""),
                  `modules to test` = paste(head(d$flag_modules, 8), collapse = " "))
